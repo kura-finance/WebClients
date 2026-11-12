@@ -16,6 +16,7 @@ import { useWallets } from "@privy-io/react-auth";
 import { useHomeWallet } from "@/hooks/useHomeWallet";
 import { useAppStore } from "@/store/useAppStore";
 import { isPimlicoConfigured, isPrivyConfigured } from "@/config/env";
+import { features } from "@/config/features";
 import PrivyEoaSync from "@/components/wallet/PrivyEoaSync";
 import BridgeVerifyGate from "@/components/wallet/BridgeVerifyGate";
 import { Button } from "@/components/ui/button";
@@ -76,7 +77,8 @@ export default function MakePaymentView() {
   const wallet = useHomeWallet();
   const userProfile = useAppStore((s) => s.userProfile);
   const { wallets } = useWallets();
-  const [step, setStep] = useState<Step>("method");
+  // Bank payouts go through Bridge (backend). Without it, crypto is the only method.
+  const [step, setStep] = useState<Step>(features.fiatRamp ? "method" : "crypto");
 
   const balance = wallet.stableBalances.USDC ?? 0;
   const sca = wallet.scaAddress;
@@ -89,7 +91,7 @@ export default function MakePaymentView() {
         <PrivyEoaSync onEoa={wallet.applyEoaAddress} persistedEoa={wallet.record.walletAddress} />
       ) : null}
 
-      {step !== "method" ? (
+      {features.fiatRamp && step !== "method" ? (
         <button
           type="button"
           onClick={() => setStep("method")}
@@ -149,7 +151,7 @@ export default function MakePaymentView() {
         />
       ) : null}
 
-      {step === "bank" ? (
+      {features.fiatRamp && step === "bank" ? (
         <BankPayoutPanel
           balance={balance}
           scaAddress={sca}

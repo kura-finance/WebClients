@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Card, CardContent } from '@/components/ui/card';
 import TopNav from '@/components/TopNav';
 import AppSidebar from '@/components/AppSidebar';
+import FeatureRouteGuard from '@/components/FeatureRouteGuard';
 import { useAppStore } from '@/store/useAppStore';
 
 export default function SettingsLayout({
@@ -62,7 +63,7 @@ export default function SettingsLayout({
       <main className="relative z-30 flex-1 overflow-y-auto bg-[var(--kura-bg)] w-full min-w-0">
         <TopNav />
         <div className="mx-auto w-full max-w-[1200px]">
-          {children}
+          <FeatureRouteGuard>{children}</FeatureRouteGuard>
         </div>
       </main>
     </div>

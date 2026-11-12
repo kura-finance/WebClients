@@ -5,6 +5,7 @@ import { useAppStore } from '@/store/useAppStore';
 import { type Investment, useFinanceStore } from '@/store/useFinanceStore';
 import { useAccount, useChainId } from 'wagmi';
 import { fetchDeBankProtocolPositions, fetchDeBankTokenPositions } from '@/lib/debankApi';
+import { features } from '@/config/features';
 
 const CHAIN_NAME_BY_ID: Record<number, string> = {
   1: 'Ethereum',
@@ -29,6 +30,7 @@ export default function AppSessionHydrator() {
   const lastConnectedWalletRef = useRef<{ address: string; chainId: number } | null>(null);
 
   // 首次載入：以 HttpOnly cookie 嘗試還原 session（並還原 sessionStorage 中的 keypair）
+  // (No-backend mode: only local prefs are restored; PrivyAuthBridge owns the session.)
   useEffect(() => {
     if (initRef.current) return;
     initRef.current = true;
@@ -42,6 +44,10 @@ export default function AppSessionHydrator() {
   }, [authStatus, clearPlaidFinanceData]);
 
   useEffect(() => {
+    // Tracked-wallet sync goes through the backend's DeBank proxy.
+    if (!features.trackFi) {
+      return;
+    }
     if (authStatus !== 'authenticated' || !isConnected) {
       return;
     }

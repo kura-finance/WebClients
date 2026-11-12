@@ -24,9 +24,11 @@ import {
   parseMembershipTier,
 } from '@/lib/membership';
 import { useFinanceStore } from './useFinanceStore';
-import { useOrgStore } from './useOrgStore';
+import { claimOrgWorkspace, useOrgStore } from './useOrgStore';
 import { useWalletSessionStore } from './useWalletSessionStore';
 import { resetTreasurySyncProbe } from '@/lib/treasurySync';
+import { isPrivyConfigured } from '@/config/env';
+import { features } from '@/config/features';
 
 export type MembershipCheckStatus = 'idle' | 'checking' | 'granted' | 'required';
 
@@ -37,6 +39,15 @@ export interface UserProfile {
   email: string;
   avatarUrl: string;
   membershipLabel: string;
+}
+
+/** Signed-in Privy user, as needed for a session without a backend. */
+export interface PrivySessionUser {
+  userId: string;
+  displayName: string;
+  email: string;
+  /** Privy embedded EOA, when already known from the user object. */
+  walletAddress: string | null;
 }
 
 export interface UserPreferences {
@@ -69,6 +80,11 @@ interface AppState {
 
   // 認證方法（Privy 驅動）
   completePrivyLogin: (accessToken: string, identityToken: string | null) => Promise<void>;
+  /**
+   * No-backend mode: the Privy user is the session (no token exchange, no
+   * membership check). Pass null when Privy reports signed out.
+   */
+  applyPrivySession: (user: PrivySessionUser | null) => void;
   verifyMembership: () => Promise<void>;
   unlockData: () => Promise<void>;
   logout: () => Promise<void>;
@@ -129,6 +145,12 @@ export const useAppStore = create<AppState>((set) => ({
     const state = useAppStore.getState();
     if (state.authStatus !== 'authenticated') {
       set({ membershipCheckStatus: 'idle' });
+      return;
+    }
+
+    if (!features.billing) {
+      // No plans without a backend — every signed-in user has full access.
+      set({ membershipCheckStatus: 'granted' });
       return;
     }
 
@@ -204,6 +226,34 @@ export const useAppStore = create<AppState>((set) => ({
     }
   },
 
+  applyPrivySession: (user) => {
+    if (!user) {
+      if (useAppStore.getState().authStatus === 'unauthenticated') return;
+      useWalletSessionStore.getState().clearWalletSession();
+      useAppStore.getState().clearAuthSession();
+      return;
+    }
+
+    claimOrgWorkspace(user.userId);
+    if (user.walletAddress) {
+      useWalletSessionStore.getState().setEoaOverride(user.walletAddress);
+    }
+    set({
+      authToken: null,
+      authStatus: 'authenticated',
+      isDecryptionReady: false,
+      needsKeyPairSetup: false,
+      userProfile: {
+        displayName: user.displayName,
+        email: user.email,
+        avatarUrl: '',
+        membershipLabel: '',
+      },
+      authError: null,
+      membershipCheckStatus: 'granted',
+    });
+  },
+
   // 用 Passkey 解鎖 E2EE 資料層（需使用者手勢觸發 WebAuthn）
   unlockData: async () => {
     try {
@@ -240,10 +290,16 @@ export const useAppStore = create<AppState>((set) => ({
   logout: async () => {
     try {
       console.info('[AppStore] Logging out');
-      await logoutUser().catch(() => undefined);
+      if (features.backend) {
+        await logoutUser().catch(() => undefined);
+      }
       clearCryptoSession();
       clearPlaidCache();
-      useOrgStore.getState().resetOrgWorkspace();
+      // Without a backend the workspace only lives in localStorage — keep it
+      // for this user's next sign-in (see claimOrgWorkspace).
+      if (features.backend) {
+        useOrgStore.getState().resetOrgWorkspace();
+      }
       useWalletSessionStore.getState().clearWalletSession();
       resetTreasurySyncProbe();
       set({
@@ -294,6 +350,18 @@ export const useAppStore = create<AppState>((set) => ({
 
   hydrateFromStorage: async () => {
     try {
+      if (!features.backend) {
+        // No backend session to restore: PrivyAuthBridge resolves authStatus once
+        // Privy is ready, so stay 'loading' until then (no login-page flash).
+        if (typeof window !== 'undefined') {
+          set({ isBalanceHidden: localStorage.getItem('kura-hide-balance') === '1' });
+        }
+        if (!isPrivyConfigured) {
+          set({ authStatus: 'unauthenticated', authError: null });
+        }
+        return;
+      }
+
       console.debug('[AppStore] Hydrating from storage');
       set({ authStatus: 'loading' });
 

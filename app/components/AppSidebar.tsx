@@ -22,6 +22,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import SidebarWalletActions from "@/components/SidebarWalletActions";
+import { features, type FeatureFlag } from "@/config/features";
 
 interface NavLinkProps {
   href: string;
@@ -58,37 +59,49 @@ function NavDivider() {
   return <div className="mx-3 my-1 border-t border-[var(--kura-border)]" role="separator" />;
 }
 
-const MAIN_LINKS: { href: string; label: string; icon: LucideIcon }[] = [
-  { href: "/dashboard", label: "Home", icon: Home },
-  { href: "/dashboard/card", label: "Card", icon: CreditCard },
-  { href: "/dashboard/crypto", label: "Portfolio", icon: Briefcase },
-];
+interface SidebarLink {
+  href: string;
+  label: string;
+  icon?: LucideIcon;
+  /** Hidden while this feature is off (see config/features.ts). */
+  feature?: FeatureFlag;
+}
 
-const PRODUCT_LINKS: { href: string; label: string; icon: LucideIcon }[] = [
+function enabledLinks(links: SidebarLink[]): SidebarLink[] {
+  return links.filter((link) => !link.feature || features[link.feature]);
+}
+
+const MAIN_LINKS = enabledLinks([
+  { href: "/dashboard", label: "Home", icon: Home },
+  { href: "/dashboard/card", label: "Card", icon: CreditCard, feature: "card" },
+  { href: "/dashboard/crypto", label: "Portfolio", icon: Briefcase },
+]);
+
+const PRODUCT_LINKS = enabledLinks([
   { href: "/dashboard/earn", label: "Earn", icon: TrendingUp },
-  { href: "/dashboard/rwa", label: "Tokenized Stock", icon: ChartCandlestick },
+  { href: "/dashboard/rwa", label: "Tokenized Stock", icon: ChartCandlestick, feature: "stocks" },
   { href: "/dashboard/markets", label: "Crypto", icon: Coins },
   { href: "/dashboard/borrow", label: "Borrow", icon: HandCoins },
-];
+]);
 
-const ORG_LINKS: { href: string; label: string; icon: LucideIcon }[] = [
+const ORG_LINKS = enabledLinks([
   { href: "/dashboard/treasury", label: "Treasury", icon: Vault },
   { href: "/dashboard/approvals", label: "Approvals", icon: ShieldCheck },
   { href: "/dashboard/team", label: "Team", icon: Users },
   { href: "/dashboard/report", label: "Report", icon: FileBarChart },
-];
+]);
 
-const TRACKFI_LINKS: { href: string; label: string; icon: LucideIcon }[] = [
-  { href: "/dashboard/accounts", label: "Bank", icon: Landmark },
-  { href: "/dashboard/investment", label: "Broker", icon: LineChart },
-  { href: "/dashboard/defi-protocol", label: "DeFi", icon: Blocks },
-];
+const TRACKFI_LINKS = enabledLinks([
+  { href: "/dashboard/accounts", label: "Bank", icon: Landmark, feature: "trackFi" },
+  { href: "/dashboard/investment", label: "Broker", icon: LineChart, feature: "trackFi" },
+  { href: "/dashboard/defi-protocol", label: "DeFi", icon: Blocks, feature: "trackFi" },
+]);
 
-const SETTINGS_LINKS = [
+const SETTINGS_LINKS = enabledLinks([
   { href: "/settings/profile", label: "Profile" },
-  { href: "/settings/security", label: "Security" },
-  { href: "/settings/plan-billing", label: "Plan & Billing" },
-] as const;
+  { href: "/settings/security", label: "Security", feature: "e2ee" },
+  { href: "/settings/plan-billing", label: "Plan & Billing", feature: "billing" },
+]);
 
 export default function AppSidebar() {
   const pathname = usePathname() || "";
@@ -155,19 +168,23 @@ export default function AppSidebar() {
             ))}
           </div>
 
-          <NavDivider />
+          {TRACKFI_LINKS.length > 0 ? (
+            <>
+              <NavDivider />
 
-          <div className="space-y-0.5">
-            {TRACKFI_LINKS.map((link) => (
-              <NavLink
-                key={link.href}
-                href={link.href}
-                label={link.label}
-                icon={link.icon}
-                isActive={isActive(link.href)}
-              />
-            ))}
-          </div>
+              <div className="space-y-0.5">
+                {TRACKFI_LINKS.map((link) => (
+                  <NavLink
+                    key={link.href}
+                    href={link.href}
+                    label={link.label}
+                    icon={link.icon}
+                    isActive={isActive(link.href)}
+                  />
+                ))}
+              </div>
+            </>
+          ) : null}
 
           <SidebarWalletActions />
         </>

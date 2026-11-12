@@ -18,6 +18,7 @@ import { useHomeSummaryCards } from "@/hooks/useHomeSummaryCards";
 import { HOME_STABLECOINS } from "@/lib/baseChain";
 import { cryptoLogoUrl } from "@/lib/assetLogos";
 import { isPrivyConfigured } from "@/config/env";
+import { features } from "@/config/features";
 import PrivyEoaSync from "@/components/wallet/PrivyEoaSync";
 import HomeStableSwapPanel from "@/components/wallet/HomeStableSwapPanel";
 import WalletHistorySection from "@/components/wallet/WalletHistorySection";
@@ -133,7 +134,7 @@ export default function HomeDashboardView() {
 
       {/* Net worth + TrackFi, then Invest / Loan / Earn */}
       <section className="mb-6 space-y-3">
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className={`grid gap-3 ${features.trackFi ? "sm:grid-cols-2" : ""}`}>
           <Link
             href="/dashboard/crypto"
             className="rounded-2xl border border-[var(--kura-border)] bg-[var(--kura-surface)] p-6 transition-colors hover:bg-[var(--kura-bg-light)]/30"
@@ -149,7 +150,9 @@ export default function HomeDashboardView() {
               </p>
             )}
             <p className="mt-2 text-xs text-[var(--kura-text-secondary)]">
-              Cash · Invest · TrackFi · Earn − Loans
+              {features.trackFi
+                ? "Cash · Invest · TrackFi · Earn − Loans"
+                : "Cash · Invest · Earn − Loans"}
               {wallet.scaAddress ? (
                 <>
                   {" · "}
@@ -159,25 +162,27 @@ export default function HomeDashboardView() {
             </p>
           </Link>
 
-          <Link
-            href="/dashboard/investment"
-            className="rounded-2xl border border-[var(--kura-border)] bg-[var(--kura-surface)] p-6 transition-colors hover:bg-[var(--kura-bg-light)]/30"
-          >
-            <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-[var(--kura-text-secondary)]">
-              <LineChart className="h-3.5 w-3.5" />
-              TrackFi
-            </p>
-            {summary.loading ? (
-              <div className="mt-3 h-10 w-40 animate-pulse rounded-lg bg-[var(--kura-bg-lighter)]" />
-            ) : (
-              <p className="mt-2 text-3xl font-semibold tracking-tight tabular-nums text-[var(--kura-text)] sm:text-4xl">
-                {isBalanceHidden ? "••••••" : formatUsd(summary.trackFiUsd)}
+          {features.trackFi ? (
+            <Link
+              href="/dashboard/investment"
+              className="rounded-2xl border border-[var(--kura-border)] bg-[var(--kura-surface)] p-6 transition-colors hover:bg-[var(--kura-bg-light)]/30"
+            >
+              <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-[var(--kura-text-secondary)]">
+                <LineChart className="h-3.5 w-3.5" />
+                TrackFi
               </p>
-            )}
-            <p className="mt-2 text-xs text-[var(--kura-text-secondary)]">
-              Banks · Brokers · CEX
-            </p>
-          </Link>
+              {summary.loading ? (
+                <div className="mt-3 h-10 w-40 animate-pulse rounded-lg bg-[var(--kura-bg-lighter)]" />
+              ) : (
+                <p className="mt-2 text-3xl font-semibold tracking-tight tabular-nums text-[var(--kura-text)] sm:text-4xl">
+                  {isBalanceHidden ? "••••••" : formatUsd(summary.trackFiUsd)}
+                </p>
+              )}
+              <p className="mt-2 text-xs text-[var(--kura-text-secondary)]">
+                Banks · Brokers · CEX
+              </p>
+            </Link>
+          ) : null}
         </div>
 
         <div className="grid grid-cols-3 gap-3">

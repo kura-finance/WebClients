@@ -45,6 +45,7 @@ import {
 } from "@/lib/treasurySync";
 import { treasuryErrorCode } from "@/lib/treasuryApi";
 import { isPimlicoConfigured, isPrivyConfigured } from "@/config/env";
+import { features } from "@/config/features";
 import PrivyEoaSync from "@/components/wallet/PrivyEoaSync";
 import TreasurySwitcher from "@/components/wallet/TreasurySwitcher";
 import { Button } from "@/components/ui/button";
@@ -649,7 +650,9 @@ export default function TreasuryView() {
         <EmptyGate
           eyebrow="Treasury"
           title="Treasury Safe"
-          description="Treasury is a multi-sig Safe for USDC — separate from your Smart Wallet (Home / Transfer). For bank ACH / Wire / FPS / SEPA, use an ops account with KYC."
+          description={`Treasury is a multi-sig Safe for USDC — separate from your Smart Wallet (Home / Transfer).${
+            features.fiatRamp ? " For bank ACH / Wire / FPS / SEPA, use an ops account with KYC." : ""
+          }`}
           action={
             <>
               {actionError ? <PageAlert variant="warning">{actionError}</PageAlert> : null}
@@ -710,13 +713,15 @@ export default function TreasuryView() {
                 </Panel>
               </div>
 
-              <p className="mt-6 text-center text-xs text-[var(--kura-text-secondary)]">
-                Personal / ops fiat stays on{" "}
-                <Link href="/dashboard" className="font-semibold text-[var(--kura-primary)] hover:underline">
-                  Home
-                </Link>{" "}
-                / Transfer with KYC — never mixed into this Treasury Safe.
-              </p>
+              {features.fiatRamp ? (
+                <p className="mt-6 text-center text-xs text-[var(--kura-text-secondary)]">
+                  Personal / ops fiat stays on{" "}
+                  <Link href="/dashboard" className="font-semibold text-[var(--kura-primary)] hover:underline">
+                    Home
+                  </Link>{" "}
+                  / Transfer with KYC — never mixed into this Treasury Safe.
+                </p>
+              ) : null}
 
               <Modal
                 isOpen={createOpen}
@@ -942,12 +947,14 @@ export default function TreasuryView() {
                 {formatUsd(stableCash, isBalanceHidden)}
               </span>
             </span>
-            <span>
-              Connected banks (TrackFi){" "}
-              <span className="font-semibold tabular-nums text-[var(--kura-text)]">
-                {formatUsd(bankCash, isBalanceHidden)}
+            {features.trackFi ? (
+              <span>
+                Connected banks (TrackFi){" "}
+                <span className="font-semibold tabular-nums text-[var(--kura-text)]">
+                  {formatUsd(bankCash, isBalanceHidden)}
+                </span>
               </span>
-            </span>
+            ) : null}
           </div>
         </Panel>
 

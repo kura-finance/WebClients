@@ -12,7 +12,8 @@ import {
   type PortfolioDisplayGroup,
   type PortfolioTokenMeta,
 } from "@/lib/portfolioTokens";
-import { hasBackendUrl } from "@/config/env";
+import { features } from "@/config/features";
+import { useWalletSessionStore } from "@/store/useWalletSessionStore";
 import { isHexAddress } from "@/lib/formatDisplay";
 import {
   sumBorrowDebtsUsd,
@@ -61,21 +62,18 @@ export function usePortfolio() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // No backend: the Smart Wallet address is derived locally (DashboardWalletBootstrap)
+  // and published through the session store — reload once it is known.
+  const localSca = useWalletSessionStore((s) => (features.backend ? null : s.scaOverride));
 
   const load = useCallback(async (isRefresh = false) => {
-    if (!hasBackendUrl()) {
-      setLoading(false);
-      setError("Backend URL is not configured");
-      return;
-    }
-
     if (isRefresh) setRefreshing(true);
     else setLoading(true);
     setError(null);
 
     try {
       const wallet = await fetchWalletRecord();
-      const sca = wallet.scaAddress;
+      const sca = localSca ?? wallet.scaAddress;
       setScaAddress(sca);
 
       const emptyPrices: PriceMap = {};
@@ -134,7 +132,7 @@ export function usePortfolio() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [localSca]);
 
   useEffect(() => {
     void load(false);

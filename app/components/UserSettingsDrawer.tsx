@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Separator } from '@/components/ui/separator';
 import { useAppStore } from '@/store/useAppStore';
 import { useKuraLogout } from '@/components/PrivyAuthBridge';
+import { features } from '@/config/features';
 
 type ThemeMode = 'light' | 'dark' | 'system';
 
@@ -139,12 +140,16 @@ export default function UserSettingsDrawer({ isOpen, onClose, anchorRef }: UserS
                   <Button variant="ghost" className="justify-start" onClick={() => handleMenuClick(() => router.push('/settings/profile'))}>
                     Profile
                   </Button>
-                  <Button variant="ghost" className="justify-start" onClick={() => handleMenuClick(() => router.push('/settings/security'))}>
-                    Security
-                  </Button>
-                  <Button variant="ghost" className="justify-start" onClick={() => handleMenuClick(() => router.push('/settings/plan-billing'))}>
-                    Plan & Billing
-                  </Button>
+                  {features.e2ee ? (
+                    <Button variant="ghost" className="justify-start" onClick={() => handleMenuClick(() => router.push('/settings/security'))}>
+                      Security
+                    </Button>
+                  ) : null}
+                  {features.billing ? (
+                    <Button variant="ghost" className="justify-start" onClick={() => handleMenuClick(() => router.push('/settings/plan-billing'))}>
+                      Plan & Billing
+                    </Button>
+                  ) : null}
                   <Button variant="ghost" className="justify-start" asChild>
                     <a href="https://kura-finance.com/privacy" target="_blank" rel="noopener noreferrer">
                       Privacy ↗

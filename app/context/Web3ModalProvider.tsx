@@ -9,6 +9,7 @@ import { WagmiAdapter } from '@reown/appkit-adapter-wagmi'
 import { mainnet, arbitrum, polygon, type AppKitNetwork } from '@reown/appkit/networks'
 import AppSessionHydrator from '@/components/AppSessionHydrator'
 import { env } from '@/config/env'
+import { features } from '@/config/features'
 
 // 1. 設定 React Query
 const queryClient = new QueryClient()
@@ -37,6 +38,9 @@ let appKitInitialized = false
 
 function ensureAppKitInitialized() {
   if (appKitInitialized) return
+  // AppKit (Reown) is only used to connect wallets for TrackFi tracking. Without
+  // it the wagmi config stays connector-less, so hooks work but nothing connects.
+  if (!features.trackFi) return
   if (!projectId) {
     console.warn('[Web3ModalProvider] NEXT_PUBLIC_REOWN_PROJECT_ID is missing, AppKit is disabled.')
     return

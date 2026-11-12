@@ -8,6 +8,7 @@ import TopNav from '@/components/TopNav';
 import AppSidebar from '@/components/AppSidebar';
 import UnlockDataBanner from '@/components/UnlockDataBanner';
 import DashboardWalletBootstrap from '@/components/wallet/DashboardWalletBootstrap';
+import FeatureRouteGuard from '@/components/FeatureRouteGuard';
 import { isPrivyConfigured } from '@/config/env';
 
 export default function DashboardLayout({
@@ -66,7 +67,7 @@ export default function DashboardLayout({
         <UnlockDataBanner />
         {isPrivyConfigured ? <DashboardWalletBootstrap /> : null}
         <div className="mx-auto w-full max-w-[1600px]">
-          {children}
+          <FeatureRouteGuard>{children}</FeatureRouteGuard>
         </div>
       </main>
     </div>

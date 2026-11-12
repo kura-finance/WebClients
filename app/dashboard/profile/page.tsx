@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { useAppStore } from '@/store/useAppStore';
 import { DashboardPage, PageHeader } from '@/components/dashboard/PageShell';
+import { features } from '@/config/features';
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -70,7 +71,11 @@ export default function ProfilePage() {
       <PageHeader
         eyebrow="Settings"
         title="Profile"
-        description="Manage your account information and preferences."
+        description={
+          features.accountProfile
+            ? 'Manage your account information and preferences.'
+            : 'Your sign-in details, as provided by your Privy login.'
+        }
       />
 
       {successMessage ? (
@@ -105,22 +110,24 @@ export default function ProfilePage() {
                 </span>
               )}
             </div>
-            <div className="flex-1">
-              <Button asChild variant="secondary">
-                <label className="cursor-pointer">
-                  Upload Image
-                  <Input
-                    type="file"
-                    accept="image/*"
-                    onChange={handleProfilePictureUpload}
-                    className="hidden"
-                  />
-                </label>
-              </Button>
-              <p className="mt-2 text-sm text-[var(--kura-text-secondary)]">
-                JPG, PNG or GIF (Max 5MB)
-              </p>
-            </div>
+            {features.accountProfile ? (
+              <div className="flex-1">
+                <Button asChild variant="secondary">
+                  <label className="cursor-pointer">
+                    Upload Image
+                    <Input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleProfilePictureUpload}
+                      className="hidden"
+                    />
+                  </label>
+                </Button>
+                <p className="mt-2 text-sm text-[var(--kura-text-secondary)]">
+                  JPG, PNG or GIF (Max 5MB)
+                </p>
+              </div>
+            ) : null}
           </div>
         </CardContent>
       </Card>
@@ -132,7 +139,9 @@ export default function ProfilePage() {
         <CardContent>
           <Input type="email" value={email} disabled />
           <CardDescription className="mt-2">
-            Your email cannot be changed. Please contact support if you need to update it.
+            {features.accountProfile
+              ? 'Your email cannot be changed. Please contact support if you need to update it.'
+              : 'Your email comes from your Privy login and cannot be changed here.'}
           </CardDescription>
         </CardContent>
       </Card>
@@ -149,6 +158,7 @@ export default function ProfilePage() {
               onChange={(e) => setDisplayNameInput(e.target.value)}
               placeholder="Enter your display name"
               className="flex-1"
+              disabled={!features.accountProfile}
             />
             {membershipLabel ? (
               <span className="whitespace-nowrap rounded-full border border-[var(--kura-border)] bg-[var(--kura-bg-light)] px-2 py-1 text-[10px] leading-none text-[var(--kura-text-secondary)]">
@@ -157,48 +167,54 @@ export default function ProfilePage() {
             ) : null}
           </div>
           <CardDescription className="mt-2">
-            This is how your name appears across the platform
+            {features.accountProfile
+              ? 'This is how your name appears across the platform'
+              : 'Taken from your Privy login. Editing needs a Kura backend.'}
           </CardDescription>
         </CardContent>
       </Card>
 
-      <div className="mb-8 flex gap-3">
-        <Button
-          onClick={() => {
-            setDisplayNameInput(userProfile.displayName);
-            setErrorMessage('');
-            setSuccessMessage('');
-          }}
-          variant="outline"
-        >
-          Cancel
-        </Button>
-        <Button onClick={handleSave} disabled={isLoading}>
-          {isLoading ? 'Saving...' : 'Save Changes'}
-        </Button>
-      </div>
+      {features.accountProfile ? (
+        <>
+          <div className="mb-8 flex gap-3">
+            <Button
+              onClick={() => {
+                setDisplayNameInput(userProfile.displayName);
+                setErrorMessage('');
+                setSuccessMessage('');
+              }}
+              variant="outline"
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleSave} disabled={isLoading}>
+              {isLoading ? 'Saving...' : 'Save Changes'}
+            </Button>
+          </div>
 
-      <Card className="border-[var(--kura-error-border)] bg-[var(--kura-error-bg)]">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-[var(--kura-error-fg)]">Danger Zone</CardTitle>
-          <CardDescription className="text-[var(--kura-error-fg)]/90">
-            Permanently delete your account and all related data. This action cannot be undone.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-sm text-[var(--kura-error-fg)]/90">
-            Make sure you have exported any data you need before continuing.
-          </p>
-          <Button
-            onClick={handleDeleteAccount}
-            variant="destructive"
-            disabled={isDeletingAccount}
-            className="w-full sm:w-auto"
-          >
-            {isDeletingAccount ? 'Deleting Account...' : 'Delete Account'}
-          </Button>
-        </CardContent>
-      </Card>
+          <Card className="border-[var(--kura-error-border)] bg-[var(--kura-error-bg)]">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-[var(--kura-error-fg)]">Danger Zone</CardTitle>
+              <CardDescription className="text-[var(--kura-error-fg)]/90">
+                Permanently delete your account and all related data. This action cannot be undone.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm text-[var(--kura-error-fg)]/90">
+                Make sure you have exported any data you need before continuing.
+              </p>
+              <Button
+                onClick={handleDeleteAccount}
+                variant="destructive"
+                disabled={isDeletingAccount}
+                className="w-full sm:w-auto"
+              >
+                {isDeletingAccount ? 'Deleting Account...' : 'Delete Account'}
+              </Button>
+            </CardContent>
+          </Card>
+        </>
+      ) : null}
     </DashboardPage>
   );
 }
