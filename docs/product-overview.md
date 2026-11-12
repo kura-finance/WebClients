@@ -9,17 +9,20 @@ The Kura Web Client is a **Next.js** finance dashboard that combines:
 
 Hosted production: **`app.kura-finance.com`**. How to run and ship: [deploy.md](deploy.md).
 
+The backend is optional. With `NEXT_PUBLIC_BACKEND_URL` empty (the default) only group 1 minus Dinari stocks is available: the client talks to Privy, Base RPC and public APIs, never calls a backend, and hides every backend-only surface (direct visits redirect to `/dashboard`). Setting the variable to a self-hosted backend restores the rest. Flags live in `app/config/features.ts`.
+
 ## Capability matrix
 
 | Capability | User surface | Execution model | Backend required? |
 |------------|--------------|-----------------|-------------------|
-| Login | Privy email / social | Session cookie after exchange | **Yes** |
+| Login | Privy email / social | No backend: the Privy session is the session. Backend: session cookie after exchange + membership check | No |
+| Profile | `/settings/profile` | No backend: read-only, from the Privy user. Backend: edit name, delete account | No (edit / delete: **Yes**) |
 | Passkey E2EE unlock | Settings / finance unlock | WebAuthn PRF → in-memory DEK | **Yes** |
-| Personal Smart Wallet | Home, Transfer, Add Money | Privy EOA + Safe + **Pimlico** UserOps | Session; fiat/KYC via backend |
-| Org Treasury | `/dashboard/treasury` | Counterfactual / deployed Safe; holdings | **Yes** (Treasuries API) |
+| Personal Smart Wallet | Home, Transfer, Add Money | Privy EOA + Safe + **Pimlico** UserOps; address derived locally without a backend | No (bank transfers via Bridge: **Yes**) |
+| Org Treasury | `/dashboard/treasury` | Counterfactual / deployed Safe; holdings | No — list kept in browser localStorage (server sync: **Yes**) |
 | Approvals | `/dashboard/approvals` | Safe Transaction Service propose → sign → execute | No* (*owners on-chain) |
-| Team | `/dashboard/team` | Add/remove Safe owners, change threshold | **Yes** (org + on-chain) |
-| Report | `/dashboard/report` | Treasury / cashflow presentation | **Yes** (org + TrackFi/wallet activity) |
+| Team | `/dashboard/team` | Add/remove Safe owners, change threshold | No (on-chain; labels in localStorage) |
+| Report | `/dashboard/report` | Treasury activity (Blockscout) and CSV export | No (bank cash-flow card: **Yes**) |
 | Earn | `/dashboard/earn/[vault]` | Morpho vault deposit/withdraw | No* (*Pimlico if Smart Wallet) |
 | Borrow | `/dashboard/borrow/[market]` | Morpho Blue borrow/repay | No* (*Pimlico if Smart Wallet) |
 | Markets | `/dashboard/markets/[symbol]` | Li.Fi swap on Base; TradingView | No* (*Pimlico) |
@@ -29,7 +32,7 @@ Hosted production: **`app.kura-finance.com`**. How to run and ship: [deploy.md](
 | TrackFi brokers | `/dashboard/investment` | Encrypted snapshots | **Yes** |
 | TrackFi DeFi | `/dashboard/defi-protocol` | DeBank proxy | **Yes** |
 | CEX connections | `/dashboard/exchange` | Encrypted API keys on server | **Yes** |
-| Portfolio | `/dashboard/crypto` | Aggregated holdings | Session + RPC / backend |
+| Portfolio | `/dashboard/crypto` | Smart Wallet holdings (Base RPC, CoinGecko, Morpho) | No |
 | Billing | Plan / billing | Stripe Checkout / portal | **Yes** |
 
 \* Treasury Morpho / Markets actions from an org Safe **propose** into Approvals instead of immediate UserOps.
@@ -59,4 +62,4 @@ Personal Smart Wallet ≠ Treasury. Fiat KYC (including Dinari) attaches to the 
 
 - This web client is **MIT** licensed, Copyright (c) 2026 **Rick Weng** ([LICENSE](../LICENSE)).
 - Security reports: **security@kura-finance.com**.
-- This repo alone cannot run full TrackFi, Treasuries persistence, billing, or Dinari without a **backendserver** deployment.
+- This repo alone runs the on-chain wallet. TrackFi, server-side Treasuries persistence, bank transfers, billing, passkey E2EE, the card waitlist and Dinari need a **backendserver** deployment.

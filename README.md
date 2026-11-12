@@ -10,6 +10,8 @@ Next.js dashboard for [app.kura-finance.com](https://app.kura-finance.com): pers
 
 The hosted **API** and **mobile wallet** are separate products. This repository is the browser app only.
 
+The backend is **optional**. With `NEXT_PUBLIC_BACKEND_URL` empty (the default) the app is a non-custodial, on-chain wallet that only needs Privy and Base RPC / public APIs. Pointing it at a self-hosted backend turns the backend features back on — see [docs/product-overview.md](docs/product-overview.md).
+
 ---
 
 ## What it does
@@ -20,9 +22,13 @@ The hosted **API** and **mobile wallet** are separate products. This repository 
 - **Team** (Safe owners / threshold) and **Report** (treasury activity)
 - **Earn / Borrow** (Morpho on Base)
 - **Markets** (spot crypto / Li.Fi) with TradingView charts
+
+Only with a backend configured (hidden otherwise):
+
 - **Tokenized stocks** (Dinari dShares on Base, via the Kura API)
 - **Card** waitlist (metal / virtual)
 - **TrackFi** — Bank (Plaid), Broker, DeFi (DeBank), CEX — via the Kura backend and passkey E2EE
+- **Bank transfers** in Add Money / Transfer (Bridge)
 - **Billing** (Stripe subscription UI)
 
 ---
@@ -32,11 +38,11 @@ The hosted **API** and **mobile wallet** are separate products. This repository 
 ```bash
 npm install
 cp .env.example .env.local
-# Set NEXT_PUBLIC_BACKEND_URL, NEXT_PUBLIC_PRIVY_APP_ID, NEXT_PUBLIC_REOWN_PROJECT_ID
+# Set NEXT_PUBLIC_PRIVY_APP_ID (leave NEXT_PUBLIC_BACKEND_URL empty for the on-chain-only app)
 npm run dev
 ```
 
-Minimum env to see login: backend URL, app URL, Privy app ID, Reown project ID. Smart Wallet paths also need Pimlico and a Base RPC. Full list and production Cloud Run steps: **[docs/deploy.md](docs/deploy.md)**.
+Minimum env to log in: app URL and Privy app ID. Sending from the Smart Wallet also needs Pimlico, and a Base RPC is recommended. A backend URL (plus Reown project ID for TrackFi wallet tracking) is only needed for the backend features. Full list and production Cloud Run steps: **[docs/deploy.md](docs/deploy.md)**.
 
 ```bash
 npm run lint
@@ -64,7 +70,7 @@ npm run build
 
 | System | Role |
 |--------|------|
-| **backendserver** | API (`api.kura-finance.com`) — auth, Treasuries, TrackFi, Stripe, passkeys, Dinari |
+| **backendserver** | API (`api.kura-finance.com`), optional — auth, Treasuries sync, TrackFi, Stripe, passkeys, Dinari |
 | **mobile-app** | React Native wallet (iOS / Android) |
 
 Security reports: **security@kura-finance.com**

@@ -34,6 +34,8 @@
      waitlist                      TradingView
 ```
 
+The Kura API (left branch) is **optional**. `app/config/features.ts` derives one flag per product area from `NEXT_PUBLIC_BACKEND_URL`. When it is empty the client only uses the right branch: the Privy session is the app session (no token exchange or membership check), the personal Safe address is derived locally from the Privy EOA (`app/lib/personalSafe.ts`), the Treasury list lives in localStorage, and backend-only routes and UI are hidden (`FeatureRouteGuard` redirects direct visits to `/dashboard`).
+
 ## Route map
 
 | Area | Primary routes |
@@ -60,7 +62,7 @@
 
 ## Backend domain alignment
 
-Same API family as mobile. Representative modules:
+Same API family as mobile; used only when a backend is configured. Representative modules:
 
 | Backend domain | Client module | Purpose |
 |----------------|---------------|---------|
