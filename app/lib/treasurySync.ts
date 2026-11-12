@@ -76,6 +76,8 @@ function waitForOrgPersistHydration(): Promise<void> {
  * If server empty and local has data → one-shot PUT migrate (only safe use of PUT /).
  */
 export async function hydrateTreasuryWorkspace(): Promise<void> {
+  // No backend: the persisted local workspace is already the source of truth.
+  if (!features.backend) return;
   if (hydratePromise) return hydratePromise;
   hydratePromise = (async () => {
     await waitForOrgPersistHydration();

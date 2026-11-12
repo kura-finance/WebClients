@@ -404,26 +404,17 @@ const ORG_OWNER_KEY = "kura-org-owner";
  */
 export function claimOrgWorkspace(ownerId: string): void {
   if (typeof window === "undefined") return;
-  const claim = () => {
-    try {
-      const previous = localStorage.getItem(ORG_OWNER_KEY);
-      if (previous && previous !== ownerId) {
-        useOrgStore.getState().resetOrgWorkspace();
-      }
-      localStorage.setItem(ORG_OWNER_KEY, ownerId);
-    } catch {
-      /* storage unavailable */
+  // No wait on persist hydration: localStorage rehydrates synchronously when the
+  // store is created, so the workspace is already loaded by the time a user signs in.
+  try {
+    const previous = localStorage.getItem(ORG_OWNER_KEY);
+    if (previous && previous !== ownerId) {
+      useOrgStore.getState().resetOrgWorkspace();
     }
-  };
-  const persistApi = useOrgStore.persist;
-  if (persistApi.hasHydrated()) {
-    claim();
-    return;
+    localStorage.setItem(ORG_OWNER_KEY, ownerId);
+  } catch {
+    /* storage unavailable */
   }
-  const unsub = persistApi.onFinishHydration(() => {
-    unsub();
-    claim();
-  });
 }
 
 /** Active treasury entry (null if none). */
