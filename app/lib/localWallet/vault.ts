@@ -88,6 +88,15 @@ function fromBase64(value: string): Uint8Array<ArrayBuffer> {
   return bytes;
 }
 
+/** WebCrypto, which browsers only expose on HTTPS (or localhost). */
+function subtleCrypto(): SubtleCrypto {
+  const subtle = globalThis.crypto?.subtle;
+  if (!subtle) {
+    throw new Error("Encryption is unavailable: open this app over HTTPS (or on localhost).");
+  }
+  return subtle;
+}
+
 function randomBytes(length: number): Uint8Array<ArrayBuffer> {
   return globalThis.crypto.getRandomValues(new Uint8Array(length));
 }
@@ -108,7 +117,7 @@ async function deriveKey(
   iterations: number,
   usage: "encrypt" | "decrypt",
 ): Promise<CryptoKey> {
-  const subtle = globalThis.crypto.subtle;
+  const subtle = subtleCrypto();
   const material = await subtle.importKey(
     "raw",
     new TextEncoder().encode(password.normalize("NFKD")),
@@ -176,7 +185,7 @@ export async function encryptVault(secret: WalletSecret, password: string): Prom
       ? { kind: secret.kind, phrase: secret.phrase, privateKey: secret.privateKey }
       : { kind: secret.kind, privateKey: secret.privateKey };
 
-  const ciphertext = await globalThis.crypto.subtle.encrypt(
+  const ciphertext = await subtleCrypto().encrypt(
     { name: "AES-GCM", iv, additionalData: additionalData(VAULT_ITERATIONS) },
     key,
     new TextEncoder().encode(JSON.stringify(plaintext)),
@@ -204,7 +213,7 @@ export async function decryptVault(value: unknown, password: string): Promise<Wa
 
   let plaintext: ArrayBuffer;
   try {
-    plaintext = await globalThis.crypto.subtle.decrypt(
+    plaintext = await subtleCrypto().decrypt(
       {
         name: "AES-GCM",
         iv: fromBase64(record.iv),

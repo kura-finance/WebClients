@@ -9,16 +9,17 @@ The Kura Web Client is a **Next.js** finance dashboard that combines:
 
 Hosted production: **`app.kura-finance.com`**. How to run and ship: [deploy.md](deploy.md).
 
-The backend is optional. With `NEXT_PUBLIC_BACKEND_URL` empty (the default) only group 1 minus Dinari stocks is available: the client talks to Privy, Base RPC and public APIs, never calls a backend, and hides every backend-only surface (direct visits redirect to `/dashboard`). Setting the variable to a self-hosted backend restores the rest. Flags live in `app/config/features.ts`.
+The backend is optional. With `NEXT_PUBLIC_BACKEND_URL` empty (the default) only group 1 minus Dinari stocks is available. There is no account and no Privy: the Safe owner key is created or imported in the browser and kept in a password-encrypted vault there. The client talks to Base RPC and public APIs only, never calls a backend, and hides every backend-only surface (direct visits redirect to `/dashboard`). Setting the variable to a self-hosted backend switches to Privy login and restores the rest. Flags live in `app/config/features.ts`.
 
 ## Capability matrix
 
 | Capability | User surface | Execution model | Backend required? |
 |------------|--------------|-----------------|-------------------|
-| Login | Privy email / social | No backend: the Privy session is the session. Backend: session cookie after exchange + membership check | No |
-| Profile | `/settings/profile` | No backend: read-only, from the Privy user. Backend: edit name, delete account | No (edit / delete: **Yes**) |
+| Sign-in | `/` | No backend: create / import a wallet, then unlock it with its password (locks on reload and after 15 idle minutes). Backend: Privy email / social, session cookie after exchange + membership check | No |
+| Wallet backup | `/settings/security` | No backend: reveal recovery phrase / private key, remove the wallet from the browser (password required) | No (no-backend mode only) |
+| Profile | `/settings/profile` | No backend: local display name, EOA and Safe addresses. Backend: account profile, edit name, delete account | No (account profile: **Yes**) |
 | Passkey E2EE unlock | Settings / finance unlock | WebAuthn PRF → in-memory DEK | **Yes** |
-| Personal Smart Wallet | Home, Transfer, Add Money | Privy EOA + Safe + **Pimlico** UserOps; address derived locally without a backend | No (bank transfers via Bridge: **Yes**) |
+| Personal Smart Wallet | Home, Transfer, Add Money | Owner EOA (browser vault, or Privy with a backend) + Safe + **Pimlico** UserOps; Safe address derived locally without a backend | No (bank transfers via Bridge: **Yes**) |
 | Org Treasury | `/dashboard/treasury` | Counterfactual / deployed Safe; holdings | No — list kept in browser localStorage (server sync: **Yes**) |
 | Approvals | `/dashboard/approvals` | Safe Transaction Service propose → sign → execute | No* (*owners on-chain) |
 | Team | `/dashboard/team` | Add/remove Safe owners, change threshold | No (on-chain; labels in localStorage) |
@@ -62,4 +63,4 @@ Personal Smart Wallet ≠ Treasury. Fiat KYC (including Dinari) attaches to the 
 
 - This web client is **MIT** licensed, Copyright (c) 2026 **Rick Weng** ([LICENSE](../LICENSE)).
 - Security reports: **security@kura-finance.com**.
-- This repo alone runs the on-chain wallet. TrackFi, server-side Treasuries persistence, bank transfers, billing, passkey E2EE, the card waitlist and Dinari need a **backendserver** deployment.
+- This repo alone runs the on-chain wallet (browser key vault, no Privy). Privy login, TrackFi, server-side Treasuries persistence, bank transfers, billing, passkey E2EE, the card waitlist and Dinari need a **backendserver** deployment.

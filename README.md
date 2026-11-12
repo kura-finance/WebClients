@@ -10,7 +10,7 @@ Next.js dashboard for [app.kura-finance.com](https://app.kura-finance.com): pers
 
 The hosted **API** and **mobile wallet** are separate products. This repository is the browser app only.
 
-The backend is **optional**. With `NEXT_PUBLIC_BACKEND_URL` empty (the default) the app is a non-custodial, on-chain wallet that only needs Privy and Base RPC / public APIs. Pointing it at a self-hosted backend turns the backend features back on — see [docs/product-overview.md](docs/product-overview.md).
+The backend is **optional**. With `NEXT_PUBLIC_BACKEND_URL` empty (the default) the app is a self-custodial, on-chain wallet with no account, no backend and no Privy: you create or import a key in the browser (12-word recovery phrase or private key), it is stored in a password-encrypted vault in that browser, and the app only talks to Base RPC / public APIs. The same recovery phrase gives the same wallet in the mobile app. Pointing the build at a self-hosted backend switches to Privy login and turns the backend features back on — see [docs/product-overview.md](docs/product-overview.md) and [docs/threat-model.md](docs/threat-model.md).
 
 ---
 
@@ -38,15 +38,16 @@ Only with a backend configured (hidden otherwise):
 ```bash
 npm install
 cp .env.example .env.local
-# Set NEXT_PUBLIC_PRIVY_APP_ID (leave NEXT_PUBLIC_BACKEND_URL empty for the on-chain-only app)
+# Leave NEXT_PUBLIC_BACKEND_URL empty for the on-chain-only app (no other key is required to start)
 npm run dev
 ```
 
-Minimum env to log in: app URL and Privy app ID. Sending from the Smart Wallet also needs Pimlico, and a Base RPC is recommended. A backend URL (plus Reown project ID for TrackFi wallet tracking) is only needed for the backend features. Full list and production Cloud Run steps: **[docs/deploy.md](docs/deploy.md)**.
+Nothing is required to open the app and create a wallet. Sending from the Smart Wallet needs Pimlico, and a Base RPC is recommended. A backend URL, a Privy app ID and a Reown project ID are only needed for backend mode. Full list and production Cloud Run steps: **[docs/deploy.md](docs/deploy.md)**.
 
 ```bash
 npm run lint
 npx tsc --noEmit
+npm test
 npm run build
 ```
 

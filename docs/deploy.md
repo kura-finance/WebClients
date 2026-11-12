@@ -15,11 +15,11 @@ Related: [environment template](../.env.example) · [architecture](architecture.
 | Node.js **24** | Matches the production Dockerfile |
 | npm | `npm ci --legacy-peer-deps` in Docker |
 | A **backend** (`backendserver`) — optional | Treasuries sync, TrackFi, bank transfers, Stripe, passkeys, Dinari |
-| Privy app | Login + embedded EOA |
+| Privy app — backend mode only | Login + embedded EOA |
 | Reown project — backend mode only | External wallet connect (TrackFi) |
 | GCP project (production) | Artifact Registry / GCR + Cloud Run |
 
-Full TrackFi, server-side Treasuries persistence, bank transfers, billing, passkeys, and tokenized stocks require a correctly configured backend. With `NEXT_PUBLIC_BACKEND_URL` empty the app runs with Privy, Base RPC, and Pimlico alone: login, Smart Wallet, Treasury (browser-local list), Approvals, Team, Report, Earn, Borrow, Markets.
+Full TrackFi, server-side Treasuries persistence, bank transfers, billing, passkeys, and tokenized stocks require a correctly configured backend. With `NEXT_PUBLIC_BACKEND_URL` empty the app runs with a Base RPC and Pimlico alone — no Privy, no account: the user's key lives in a password-encrypted vault in their browser. Available: Smart Wallet, Treasury (browser-local list), Approvals, Team, Report, Earn, Borrow, Markets. Serve it over HTTPS (WebCrypto needs a secure context) and treat the deployed bundle as part of the wallet: whoever can change it can take users' keys.
 
 ---
 
@@ -63,8 +63,8 @@ Publishable keys are visible to every user of that build. Treat leaks as rotatio
 |----------|---------|
 | `NEXT_PUBLIC_BACKEND_URL` | Kura API (no trailing slash). Optional — empty disables backend features |
 | `NEXT_PUBLIC_APP_URL` | Web origin (CORS, CSP, WebAuthn, Privy) |
-| `NEXT_PUBLIC_PRIVY_APP_ID` | Login |
-| `NEXT_PUBLIC_REOWN_PROJECT_ID` | Reown AppKit |
+| `NEXT_PUBLIC_PRIVY_APP_ID` | Login — backend mode only (unused without a backend) |
+| `NEXT_PUBLIC_REOWN_PROJECT_ID` | Reown AppKit — backend mode only |
 
 ### On-chain product
 

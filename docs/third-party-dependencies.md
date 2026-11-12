@@ -13,7 +13,7 @@
 
 | Vendor | Role | Client secret? | Failure impact |
 |--------|------|----------------|----------------|
-| **Privy** | Login + embedded EOA | App ID (public) | Login / signing blocked |
+| **Privy** (backend mode only) | Login + embedded EOA | App ID (public) | Login / signing blocked |
 | **Reown** | External wallet AppKit | Project ID (public) | External portfolio connect |
 | **Pimlico** | ERC-4337 bundler / paymaster | API key | Smart Wallet UserOps fail |
 | **Alchemy** (or RPC) | Base JSON-RPC | API key / URL | Reads / some writes degrade |
@@ -35,10 +35,11 @@ Hosted production pins **`0.25` (25%)** in the deploy workflow. Set your own sha
 
 | Feature | Must have |
 |---------|-----------|
-| Login | Privy + Kura API |
+| Sign-in (no backend) | Nothing external — browser wallet vault |
+| Login (backend mode) | Privy + Kura API |
 | TrackFi | Kura API + Plaid (backend) + passkey |
 | Treasuries persistence | Kura API (`/api/treasuries`) |
-| Approvals / Team | Privy EOA owner + Safe TX Service + Base |
+| Approvals / Team | Owner EOA (browser wallet, or Privy in backend mode) + Safe TX Service + Base |
 | Smart Wallet Transfer / Earn / Borrow / Markets | Pimlico + Base RPC (+ Li.Fi for swap/bridge) |
 | Earn / Borrow catalogs | Morpho GraphQL |
 | Tokenized stocks | Kura API (`/api/dinari`) + KYC |
