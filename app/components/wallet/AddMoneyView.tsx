@@ -13,8 +13,8 @@ import {
 } from "lucide-react";
 import { useHomeWallet } from "@/hooks/useHomeWallet";
 import { useAppStore } from "@/store/useAppStore";
-import { isPrivyConfigured } from "@/config/env";
 import { features } from "@/config/features";
+import { isSignerConfigured } from "@/lib/signer";
 import PrivyEoaSync from "@/components/wallet/PrivyEoaSync";
 import BridgeVerifyGate from "@/components/wallet/BridgeVerifyGate";
 import { Button } from "@/components/ui/button";
@@ -83,7 +83,7 @@ export default function AddMoneyView() {
 
   return (
     <DashboardPage variant="wizard">
-      {isPrivyConfigured ? (
+      {isSignerConfigured ? (
         <PrivyEoaSync onEoa={wallet.applyEoaAddress} persistedEoa={wallet.record.walletAddress} />
       ) : null}
 

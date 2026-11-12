@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { useAppStore } from "@/store/useAppStore";
 import { isPrivyConfigured } from "@/context/PrivyProvider";
 import MembershipGate from "@/components/MembershipGate";
+import LocalWalletGate from "@/components/localWallet/LocalWalletGate";
 import { features } from "@/config/features";
 import logoIcon from "./logo.webp";
 import referPreview from "./refer.webp";
@@ -46,9 +47,8 @@ function PrivyLoginButton() {
       )}
 
       <p className="text-sm text-[var(--kura-text-secondary)] leading-relaxed">
-        {features.e2ee
-          ? "Sign in with your email or social account. Your financial data stays end-to-end encrypted and is unlocked on this device with a passkey."
-          : "Sign in with your email or social account to open your Smart Wallet on Base."}
+        Sign in with your email or social account. Your financial data stays end-to-end
+        encrypted and is unlocked on this device with a passkey.
       </p>
 
       <Button
@@ -105,7 +105,7 @@ export default function RootHubPage() {
         <div className="flex-1 flex justify-center items-center">
           <div
             className={`w-full rounded-xl border border-[var(--kura-border)] bg-[var(--kura-surface)] overflow-hidden grid grid-cols-1 shadow-[0_20px_60px_rgba(18,19,26,0.06)] ${
-              features.billing ? "max-w-[760px] md:grid-cols-2" : "max-w-[380px]"
+              features.billing ? "max-w-[760px] md:grid-cols-2" : "max-w-[440px]"
             }`}
           >
             <section
@@ -117,7 +117,10 @@ export default function RootHubPage() {
                 Welcome to Kura
               </h1>
 
-              {isPrivyConfigured ? (
+              {!features.backend ? (
+                // No backend: no account and no Privy — create / import / unlock a browser wallet.
+                <LocalWalletGate />
+              ) : isPrivyConfigured ? (
                 <PrivyLoginButton />
               ) : (
                 <Alert variant="warning">

@@ -7,7 +7,7 @@ import { useAppStore } from "@/store/useAppStore";
 import { useHomeWallet } from "@/hooks/useHomeWallet";
 import { useWalletActivityHistory } from "@/hooks/useWalletActivity";
 import type { WalletActivity } from "@/hooks/useWalletActivity";
-import { isPrivyConfigured } from "@/config/env";
+import { isSignerConfigured } from "@/lib/signer";
 import PrivyEoaSync from "@/components/wallet/PrivyEoaSync";
 import WalletTxRow, { WalletTxRowSkeleton } from "@/components/wallet/WalletTxRow";
 import { WalletTxDetailModal } from "@/components/wallet/WalletHistorySection";
@@ -37,7 +37,7 @@ export default function WalletHistoryPage() {
 
   return (
     <DashboardPage>
-      {isPrivyConfigured ? (
+      {isSignerConfigured ? (
         <PrivyEoaSync onEoa={wallet.applyEoaAddress} persistedEoa={wallet.record.walletAddress} />
       ) : null}
 

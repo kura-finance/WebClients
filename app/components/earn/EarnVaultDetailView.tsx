@@ -8,7 +8,6 @@ import {
   Loader2,
   RefreshCw,
 } from "lucide-react";
-import { useWallets } from "@privy-io/react-auth";
 import {
   EARN_SERVICE_FEE_RATE,
   effectiveEarnNetApy,
@@ -26,9 +25,10 @@ import {
 } from "@/lib/morphoEarn";
 import { submitCallsSmartOrTreasury } from "@/lib/submitTradingCalls";
 import { errMessage, formatUsd, truncateAddress } from "@/lib/formatDisplay";
-import { isPimlicoConfigured, isPrivyConfigured } from "@/config/env";
+import { isPimlicoConfigured } from "@/config/env";
 import { PORTFOLIO_TOKENS } from "@/lib/portfolioTokens";
 import { cryptoLogoUrl } from "@/lib/assetLogos";
+import { isSignerConfigured, useSignerWallet } from "@/lib/signer";
 import PrivyEoaSync from "@/components/wallet/PrivyEoaSync";
 import TradingAccountPicker, {
   useTradingAccount,
@@ -69,9 +69,7 @@ export default function EarnVaultDetailView({ address }: { address: string }) {
     personal,
     treasury,
   } = useTradingAccount();
-  const { wallets } = useWallets();
-  const privyWallet =
-    wallets.find((w) => w.walletClientType === "privy") ?? wallets[0] ?? null;
+  const signerWallet = useSignerWallet();
 
   const [detail, setDetail] = useState<MorphoVaultDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -156,7 +154,7 @@ export default function EarnVaultDetailView({ address }: { address: string }) {
   const canSubmit =
     !!detail &&
     !!scaAddress &&
-    !!privyWallet &&
+    !!signerWallet &&
     (isTreasury || isPimlicoConfigured()) &&
     numeric > 0 &&
     numeric <= available &&
@@ -171,7 +169,7 @@ export default function EarnVaultDetailView({ address }: { address: string }) {
         : 1);
 
   const submit = async () => {
-    if (!detail || !scaAddress || !privyWallet || !canSubmit) return;
+    if (!detail || !scaAddress || !signerWallet || !canSubmit) return;
     setActionError(null);
     setTxHash(null);
     setProposedHash(null);
@@ -192,7 +190,7 @@ export default function EarnVaultDetailView({ address }: { address: string }) {
               owner: scaAddress as `0x${string}`,
               amountAssets: numeric,
             });
-      const provider = (await privyWallet.getEthereumProvider()) as {
+      const provider = (await signerWallet.getEthereumProvider()) as {
         request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
       };
       const result = await submitCallsSmartOrTreasury({
@@ -251,7 +249,7 @@ export default function EarnVaultDetailView({ address }: { address: string }) {
 
   return (
     <DashboardPage>
-      {isPrivyConfigured ? (
+      {isSignerConfigured ? (
         <PrivyEoaSync
           onEoa={personal.applyEoaAddress}
           persistedEoa={personal.record.walletAddress}

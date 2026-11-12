@@ -12,7 +12,6 @@ import {
   UserPlus,
   Users,
 } from "lucide-react";
-import { useWallets } from "@privy-io/react-auth";
 import { useAppStore } from "@/store/useAppStore";
 import { useOrgStore } from "@/store/useOrgStore";
 import { useHomeWallet } from "@/hooks/useHomeWallet";
@@ -34,7 +33,9 @@ import {
   normalizeAddress,
 } from "@/lib/safeOwners";
 import { executeCallsFromSafe } from "@/lib/smartAccountSend";
-import { isPimlicoConfigured, isPrivyConfigured } from "@/config/env";
+import { isPimlicoConfigured } from "@/config/env";
+import { isSignerConfigured, useSignerWallet } from "@/lib/signer";
+import { signerCopy } from "@/lib/signer/copy";
 import PrivyEoaSync from "@/components/wallet/PrivyEoaSync";
 import TreasurySwitcher from "@/components/wallet/TreasurySwitcher";
 import { Button } from "@/components/ui/button";
@@ -72,16 +73,7 @@ export default function TeamView() {
   const syncSafeOwners = useOrgStore((s) => s.syncSafeOwners);
   const personal = useHomeWallet();
   const treasury = useTreasuryWallet();
-  const { wallets } = useWallets();
-
-  const privyWallet = useMemo(() => {
-    return (
-      wallets.find((w) => w.walletClientType === "privy") ??
-      wallets.find((w) => w.address?.toLowerCase() === personal.eoaAddress?.toLowerCase()) ??
-      wallets[0] ??
-      null
-    );
-  }, [wallets, personal.eoaAddress]);
+  const signerWallet = useSignerWallet(personal.eoaAddress);
 
   const owners = treasury.safeSigners?.owners ?? [];
   const onChainThreshold = treasury.safeSigners?.threshold ?? 1;
@@ -117,7 +109,7 @@ export default function TeamView() {
 
   const canMutateSafe =
     !!treasury.scaAddress &&
-    !!privyWallet &&
+    !!signerWallet &&
     isPimlicoConfigured() &&
     isSafeOwner(owners, personal.eoaAddress);
 
@@ -135,7 +127,7 @@ export default function TeamView() {
   const runSafeCalls = useCallback(
     async (label: string, calls: Parameters<typeof executeCallsFromSafe>[0]["calls"]) => {
       if (!treasury.scaAddress) throw new Error("Treasury Safe not found. Create one under Treasury.");
-      if (!privyWallet) throw new Error("Privy wallet unavailable. Sign in again.");
+      if (!signerWallet) throw new Error(signerCopy.walletUnavailable);
       if (!isPimlicoConfigured()) {
         throw new Error("Pimlico is not configured. Set NEXT_PUBLIC_PIMLICO_API_KEY.");
       }
@@ -146,7 +138,7 @@ export default function TeamView() {
       setTxHash(null);
       setBusyId(label);
       try {
-        const provider = (await privyWallet.getEthereumProvider()) as {
+        const provider = (await signerWallet.getEthereumProvider()) as {
           request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
         };
         const hash = await executeCallsFromSafe({
@@ -166,7 +158,7 @@ export default function TeamView() {
         setBusyId(null);
       }
     },
-    [owners, personal.eoaAddress, privyWallet, treasury],
+    [owners, personal.eoaAddress, signerWallet, treasury],
   );
 
   const handleInvite = async (e: React.FormEvent) => {
@@ -337,7 +329,7 @@ export default function TeamView() {
   if (!treasury.bound) {
     return (
       <>
-        {isPrivyConfigured ? (
+        {isSignerConfigured ? (
           <PrivyEoaSync onEoa={personal.applyEoaAddress} persistedEoa={personal.record.walletAddress} />
         ) : null}
         <EmptyGate
@@ -356,7 +348,7 @@ export default function TeamView() {
 
   return (
     <DashboardPage>
-      {isPrivyConfigured ? (
+      {isSignerConfigured ? (
         <PrivyEoaSync onEoa={personal.applyEoaAddress} persistedEoa={personal.record.walletAddress} />
       ) : null}
 
@@ -482,8 +474,8 @@ export default function TeamView() {
           {!isPimlicoConfigured()
             ? "Pimlico is not configured — signing changes are view-only."
             : !isSafeOwner(owners, personal.eoaAddress)
-              ? "Your Privy EOA is not an on-chain Safe owner, so you can view but not change signers."
-              : "Connect Privy to manage Safe signers."}
+              ? `Your ${signerCopy.eoa} is not an on-chain Safe owner, so you can view but not change signers.`
+              : `${signerCopy.connect} to manage Safe signers.`}
         </div>
       ) : null}
 
@@ -650,7 +642,7 @@ export default function TeamView() {
           <li className="flex gap-2">
             <KeyRound className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--kura-primary-light)]" />
             <span>
-              Use each member&apos;s Privy / EOA address. They must control that key to approve UserOps
+              Use each member&apos;s {signerCopy.memberAddressHint}. They must control that key to approve UserOps
               for transfers and payments.
             </span>
           </li>
@@ -696,7 +688,7 @@ export default function TeamView() {
           <Input
             value={walletAddress}
             onChange={(e) => setWalletAddress(e.target.value)}
-            placeholder="EOA / Privy address (0x…)"
+            placeholder={signerCopy.memberAddressPlaceholder}
             className="font-mono text-xs"
             required={canSign}
           />
@@ -731,7 +723,7 @@ export default function TeamView() {
                 Can sign (Safe owner)
               </span>
               <span className="mt-0.5 block text-[11px] text-[var(--kura-text-secondary)]">
-                Adds this wallet as an on-chain Safe owner. Requires your Privy key to approve the
+                Adds this wallet as an on-chain Safe owner. Requires your {signerCopy.key} to approve the
                 change.
               </span>
             </span>

@@ -3,12 +3,13 @@
 /**
  * Smart Wallet setup — mirrors mobile `useKuraCardWallet` provision:
  *   compute counterfactual Safe (salt 0) → PUT /api/wallet/sca (+ eoa)
+ * The owner EOA comes from the signer: Privy with a backend, the browser wallet
+ * without one (then nothing is saved remotely).
  * Does not deploy on-chain; first UserOp deploys like mobile.
  */
 
 import { useEffect, useRef } from "react";
-import { useWallets } from "@privy-io/react-auth";
-import { isPrivyConfigured } from "@/config/env";
+import { isSignerConfigured, useSignerWallet } from "@/lib/signer";
 import { computePersonalSafeAddress } from "@/lib/personalSafe";
 import { saveEoaAddress, saveScaAddress } from "@/lib/walletApi";
 
@@ -20,12 +21,12 @@ interface PrivySafeSetupProps {
 }
 
 export default function PrivySafeSetup({ persistedSca, onSca, onError }: PrivySafeSetupProps) {
-  const { wallets } = useWallets();
+  const signerWallet = useSignerWallet();
   const busyRef = useRef(false);
   const doneRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!isPrivyConfigured) return;
+    if (!isSignerConfigured) return;
 
     if (persistedSca) {
       onSca(persistedSca);
@@ -33,9 +34,7 @@ export default function PrivySafeSetup({ persistedSca, onSca, onError }: PrivySa
       return;
     }
 
-    const privyWallet =
-      wallets.find((w) => w.walletClientType === "privy") ?? wallets[0] ?? null;
-    if (!privyWallet) return;
+    if (!signerWallet) return;
     if (busyRef.current) return;
     if (doneRef.current) return;
 
@@ -43,7 +42,7 @@ export default function PrivySafeSetup({ persistedSca, onSca, onError }: PrivySa
 
     void (async () => {
       try {
-        const provider = (await privyWallet.getEthereumProvider()) as {
+        const provider = (await signerWallet.getEthereumProvider()) as {
           request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
         };
         const accounts = (await provider.request({ method: "eth_accounts" })) as string[];
@@ -74,7 +73,7 @@ export default function PrivySafeSetup({ persistedSca, onSca, onError }: PrivySa
         busyRef.current = false;
       }
     })();
-  }, [wallets, persistedSca, onSca, onError]);
+  }, [signerWallet, persistedSca, onSca, onError]);
 
   return null;
 }

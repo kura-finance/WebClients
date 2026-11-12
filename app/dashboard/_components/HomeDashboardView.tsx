@@ -17,8 +17,9 @@ import { useWalletActivity } from "@/hooks/useWalletActivity";
 import { useHomeSummaryCards } from "@/hooks/useHomeSummaryCards";
 import { HOME_STABLECOINS } from "@/lib/baseChain";
 import { cryptoLogoUrl } from "@/lib/assetLogos";
-import { isPrivyConfigured } from "@/config/env";
 import { features } from "@/config/features";
+import { isSignerConfigured } from "@/lib/signer";
+import { signerCopy } from "@/lib/signer/copy";
 import PrivyEoaSync from "@/components/wallet/PrivyEoaSync";
 import HomeStableSwapPanel from "@/components/wallet/HomeStableSwapPanel";
 import WalletHistorySection from "@/components/wallet/WalletHistorySection";
@@ -93,7 +94,7 @@ export default function HomeDashboardView() {
 
   return (
     <DashboardPage>
-      {isPrivyConfigured ? (
+      {isSignerConfigured ? (
         <PrivyEoaSync onEoa={wallet.applyEoaAddress} persistedEoa={wallet.record.walletAddress} />
       ) : null}
 
@@ -241,7 +242,7 @@ export default function HomeDashboardView() {
             </p>
           ) : !wallet.scaAddress ? (
             <p className="flex flex-1 items-center justify-center py-6 text-center text-sm text-[var(--kura-text-secondary)]">
-              Connect with Privy to create your Smart Wallet address. You can fund it before the first
+              {signerCopy.connectWith} to create your Smart Wallet address. You can fund it before the first
               on-chain transaction.
             </p>
           ) : (

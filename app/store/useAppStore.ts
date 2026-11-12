@@ -27,7 +27,6 @@ import { useFinanceStore } from './useFinanceStore';
 import { claimOrgWorkspace, useOrgStore } from './useOrgStore';
 import { useWalletSessionStore } from './useWalletSessionStore';
 import { resetTreasurySyncProbe } from '@/lib/treasurySync';
-import { isPrivyConfigured } from '@/config/env';
 import { features } from '@/config/features';
 
 export type MembershipCheckStatus = 'idle' | 'checking' | 'granted' | 'required';
@@ -41,13 +40,25 @@ export interface UserProfile {
   membershipLabel: string;
 }
 
-/** Signed-in Privy user, as needed for a session without a backend. */
-export interface PrivySessionUser {
+/** Unlocked browser wallet — the whole "session" when there is no backend. */
+export interface LocalSessionUser {
+  /** `local:<lowercased eoa>` */
   userId: string;
-  displayName: string;
-  email: string;
-  /** Privy embedded EOA, when already known from the user object. */
-  walletAddress: string | null;
+  /** EOA held in the vault (the Safe owner). */
+  walletAddress: string;
+}
+
+/** No backend: the display name is a local label, kept per wallet in this browser. */
+function localDisplayNameKey(userId: string): string {
+  return `kura-display-name:${userId}`;
+}
+
+function readLocalDisplayName(userId: string): string {
+  try {
+    return localStorage.getItem(localDisplayNameKey(userId)) ?? '';
+  } catch {
+    return '';
+  }
 }
 
 export interface UserPreferences {
@@ -81,10 +92,12 @@ interface AppState {
   // 認證方法（Privy 驅動）
   completePrivyLogin: (accessToken: string, identityToken: string | null) => Promise<void>;
   /**
-   * No-backend mode: the Privy user is the session (no token exchange, no
-   * membership check). Pass null when Privy reports signed out.
+   * No-backend mode: an unlocked browser wallet is the session (no account, no
+   * token exchange, no membership check). Pass null when it is locked or absent.
    */
-  applyPrivySession: (user: PrivySessionUser | null) => void;
+  applyLocalSession: (user: LocalSessionUser | null) => void;
+  /** `local:<eoa>` while a browser wallet is unlocked (no-backend mode only). */
+  localUserId: string | null;
   verifyMembership: () => Promise<void>;
   unlockData: () => Promise<void>;
   logout: () => Promise<void>;
@@ -139,6 +152,7 @@ export const useAppStore = create<AppState>((set) => ({
   authError: null,
   e2eeError: null,
   membershipCheckStatus: 'idle',
+  localUserId: null,
 
   // 認證方法（Privy 驅動）
   verifyMembership: async () => {
@@ -226,8 +240,9 @@ export const useAppStore = create<AppState>((set) => ({
     }
   },
 
-  applyPrivySession: (user) => {
+  applyLocalSession: (user) => {
     if (!user) {
+      if (useAppStore.getState().localUserId) set({ localUserId: null });
       if (useAppStore.getState().authStatus === 'unauthenticated') return;
       useWalletSessionStore.getState().clearWalletSession();
       useAppStore.getState().clearAuthSession();
@@ -235,22 +250,22 @@ export const useAppStore = create<AppState>((set) => ({
     }
 
     claimOrgWorkspace(user.userId);
-    if (user.walletAddress) {
-      useWalletSessionStore.getState().setEoaOverride(user.walletAddress);
-    }
+    useWalletSessionStore.getState().clearWalletSession();
+    useWalletSessionStore.getState().setEoaOverride(user.walletAddress);
     set({
       authToken: null,
       authStatus: 'authenticated',
       isDecryptionReady: false,
       needsKeyPairSetup: false,
       userProfile: {
-        displayName: user.displayName,
-        email: user.email,
+        displayName: readLocalDisplayName(user.userId),
+        email: '',
         avatarUrl: '',
         membershipLabel: '',
       },
       authError: null,
       membershipCheckStatus: 'granted',
+      localUserId: user.userId,
     });
   },
 
@@ -351,13 +366,10 @@ export const useAppStore = create<AppState>((set) => ({
   hydrateFromStorage: async () => {
     try {
       if (!features.backend) {
-        // No backend session to restore: PrivyAuthBridge resolves authStatus once
-        // Privy is ready, so stay 'loading' until then (no login-page flash).
+        // No backend session to restore: LocalWalletBridge resolves authStatus once
+        // it has read the vault, so stay 'loading' until then (no flash, no loop).
         if (typeof window !== 'undefined') {
           set({ isBalanceHidden: localStorage.getItem('kura-hide-balance') === '1' });
-        }
-        if (!isPrivyConfigured) {
-          set({ authStatus: 'unauthenticated', authError: null });
         }
         return;
       }
@@ -413,6 +425,21 @@ export const useAppStore = create<AppState>((set) => ({
 
   // 使用者方法
   setDisplayName: async (displayName) => {
+    if (!features.accountProfile) {
+      // No backend: a local label for this wallet, stored in this browser only.
+      const { localUserId } = useAppStore.getState();
+      const name = displayName.trim().slice(0, 64);
+      if (localUserId) {
+        try {
+          if (name) localStorage.setItem(localDisplayNameKey(localUserId), name);
+          else localStorage.removeItem(localDisplayNameKey(localUserId));
+        } catch {
+          /* storage unavailable — keep it for this session only */
+        }
+      }
+      set((state) => ({ userProfile: { ...state.userProfile, displayName: name } }));
+      return;
+    }
     try {
       console.debug('[AppStore] Updating display name', { displayName });
       const response = await updateCurrentUserProfile({ displayName });

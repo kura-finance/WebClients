@@ -22,6 +22,7 @@ import { createPimlicoClient } from "permissionless/clients/pimlico";
 import { env, isPimlicoConfigured } from "@/config/env";
 import { USDC_BASE } from "@/lib/baseChain";
 import type { LiFiBridgeQuote } from "@/lib/lifiBridge";
+import { signerCopy } from "@/lib/signer/copy";
 
 const BASE_FALLBACK = "https://mainnet.base.org";
 
@@ -209,7 +210,7 @@ async function resolveSmartAccount(
     method: "eth_accounts",
   })) as string[];
   const eoaAddress = accounts[0] as `0x${string}` | undefined;
-  if (!eoaAddress) throw new Error("No Privy wallet available. Sign in again and retry.");
+  if (!eoaAddress) throw new Error(signerCopy.noWallet);
 
   try {
     await params.eip1193Provider.request({
@@ -237,7 +238,7 @@ async function resolveSmartAccount(
 
   if (account.address.toLowerCase() !== params.expectedScaAddress.toLowerCase()) {
     throw new Error(
-      `Smart Wallet address mismatch. Expected ${params.expectedScaAddress}, got ${account.address}. Use the same Privy account that owns your Smart Wallet.`,
+      `Smart Wallet address mismatch. Expected ${params.expectedScaAddress}, got ${account.address}. Use the same ${signerCopy.account} that owns your Smart Wallet.`,
     );
   }
 

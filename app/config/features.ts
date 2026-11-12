@@ -2,8 +2,10 @@
  * Feature flags — one boolean per product area.
  *
  * The community edition talks to chain / public APIs directly and needs no
- * Kura backend. Anything that depends on the backend is gated here and turns
- * back on when a self-hosted backend is configured via NEXT_PUBLIC_BACKEND_URL.
+ * Kura backend and no Privy: the key lives in a password-encrypted vault in the
+ * browser. Anything that depends on the backend (including the Privy login) is
+ * gated here and turns back on when a self-hosted backend is configured via
+ * NEXT_PUBLIC_BACKEND_URL.
  *
  * Gate UI and network calls on these flags instead of calling
  * `hasBackendUrl()` ad hoc.
@@ -26,7 +28,7 @@ export const features = {
   stocks: backend,
   /** Stripe plans, membership gate, referral promo. */
   billing: backend,
-  /** Passkey-unlocked E2EE data layer (Security page, unlock banner). */
+  /** Passkey-unlocked E2EE data layer (unlock banner, passkey content of the Security page). */
   e2ee: backend,
   /** Backend-stored profile: edit display name, delete account. */
   accountProfile: backend,
@@ -52,8 +54,6 @@ const ROUTE_FEATURES: readonly (readonly [string, FeatureFlag])[] = [
   ['/dashboard/rwa', 'stocks'],
   ['/dashboard/plan-billing', 'billing'],
   ['/settings/plan-billing', 'billing'],
-  ['/dashboard/security', 'e2ee'],
-  ['/settings/security', 'e2ee'],
 ];
 
 /** False when `pathname` belongs to a feature that is currently off. */

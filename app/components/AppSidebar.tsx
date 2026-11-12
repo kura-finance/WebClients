@@ -99,7 +99,7 @@ const TRACKFI_LINKS = enabledLinks([
 
 const SETTINGS_LINKS = enabledLinks([
   { href: "/settings/profile", label: "Profile" },
-  { href: "/settings/security", label: "Security", feature: "e2ee" },
+  { href: "/settings/security", label: "Security" },
   { href: "/settings/plan-billing", label: "Plan & Billing", feature: "billing" },
 ]);
 

@@ -7,13 +7,13 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import { isPrivyConfigured } from "@/config/env";
 import { fetchWalletRecord } from "@/lib/walletApi";
 import {
   hydrateTreasuryWorkspace,
   resetTreasurySyncProbe,
 } from "@/lib/treasurySync";
 import { useWalletSessionStore } from "@/store/useWalletSessionStore";
+import { isSignerConfigured } from "@/lib/signer";
 import PrivyEoaSync from "@/components/wallet/PrivyEoaSync";
 import PrivySafeSetup from "@/components/wallet/PrivySafeSetup";
 
@@ -60,7 +60,7 @@ export default function DashboardWalletBootstrap() {
     [setScaOverride],
   );
 
-  if (!isPrivyConfigured || !loaded) return null;
+  if (!isSignerConfigured || !loaded) return null;
 
   return (
     <>

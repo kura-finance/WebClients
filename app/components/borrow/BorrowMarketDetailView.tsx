@@ -8,7 +8,6 @@ import {
   Loader2,
   RefreshCw,
 } from "lucide-react";
-import { useWallets } from "@privy-io/react-auth";
 import {
   collateralDisplayName,
   computeUserLtvRatio,
@@ -32,9 +31,10 @@ import {
 import { readErc20Balance } from "@/lib/morphoEarn";
 import { submitCallsSmartOrTreasury } from "@/lib/submitTradingCalls";
 import { errMessage, formatUsd, truncateAddress } from "@/lib/formatDisplay";
-import { isPimlicoConfigured, isPrivyConfigured } from "@/config/env";
+import { isPimlicoConfigured } from "@/config/env";
 import { PORTFOLIO_TOKENS } from "@/lib/portfolioTokens";
 import { cryptoLogoUrl } from "@/lib/assetLogos";
+import { isSignerConfigured, useSignerWallet } from "@/lib/signer";
 import PrivyEoaSync from "@/components/wallet/PrivyEoaSync";
 import TradingAccountPicker, {
   useTradingAccount,
@@ -74,9 +74,7 @@ export default function BorrowMarketDetailView({ marketId }: { marketId: string 
     personal,
     treasury,
   } = useTradingAccount();
-  const { wallets } = useWallets();
-  const privyWallet =
-    wallets.find((w) => w.walletClientType === "privy") ?? wallets[0] ?? null;
+  const signerWallet = useSignerWallet();
 
   const [detail, setDetail] = useState<MorphoMarketDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -186,7 +184,7 @@ export default function BorrowMarketDetailView({ marketId }: { marketId: string 
   const canBorrow =
     !!detail &&
     !!scaAddress &&
-    !!privyWallet &&
+    !!signerWallet &&
     (isTreasury || isPimlicoConfigured()) &&
     !!detail.oracleAddress &&
     !!detail.irmAddress &&
@@ -198,14 +196,14 @@ export default function BorrowMarketDetailView({ marketId }: { marketId: string 
   const canRepay =
     !!detail &&
     !!scaAddress &&
-    !!privyWallet &&
+    !!signerWallet &&
     (isTreasury || isPimlicoConfigured()) &&
     hasDebt &&
     (Number(repayAmount) > 0 || repayAmount === "") &&
     !busy;
 
   const submit = async () => {
-    if (!detail || !scaAddress || !privyWallet) return;
+    if (!detail || !scaAddress || !signerWallet) return;
     setActionError(null);
     setTxHash(null);
     setProposedHash(null);
@@ -225,7 +223,7 @@ export default function BorrowMarketDetailView({ marketId }: { marketId: string 
               repayAll: !(Number(repayAmount) > 0),
               repayAmount: Number(repayAmount) > 0 ? Number(repayAmount) : undefined,
             });
-      const provider = (await privyWallet.getEthereumProvider()) as {
+      const provider = (await signerWallet.getEthereumProvider()) as {
         request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
       };
       const result = await submitCallsSmartOrTreasury({
@@ -307,7 +305,7 @@ export default function BorrowMarketDetailView({ marketId }: { marketId: string 
 
   return (
     <DashboardPage>
-      {isPrivyConfigured ? (
+      {isSignerConfigured ? (
         <PrivyEoaSync
           onEoa={personal.applyEoaAddress}
           persistedEoa={personal.record.walletAddress}
