@@ -38,6 +38,8 @@
 
 ## 5. 之後再做
 
+- [ ] `react-hooks/set-state-in-effect` 已在 `eslint.config.mjs` 降為警告：38 處「掛載時在 effect 裡載入資料」的寫法仍待改寫（專案已有 `@tanstack/react-query`），改完後把規則調回 error
+
 - [ ] 有後端時 Treasury 的伺服器同步沒有在跑：`useOrgStore` 的 `onRehydrateStorage` 在 store 建立期間引用自己而丟錯，載入旗標永遠不會完成
 - [ ] 加值頁的 QR code 由 `api.qrserver.com` 產生，會把錢包地址送給第三方；改成本地產生
 - [ ] 沒有 Pimlico key 就不能送交易（`lib/smartAccountSend.ts`）；手機有公用 bundler + ETH gas 備援，可以補齊
