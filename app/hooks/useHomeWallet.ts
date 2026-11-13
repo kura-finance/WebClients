@@ -10,7 +10,6 @@ import {
   type SafeSignerInfo,
   type StablecoinBalances,
 } from "@/lib/baseChain";
-import { hasBackendUrl } from "@/config/env";
 import { useWalletSessionStore } from "@/store/useWalletSessionStore";
 
 function isAddress(value: string | null | undefined): value is `0x${string}` {
@@ -107,12 +106,6 @@ export function useHomeWallet(): HomeWalletState {
   }, []);
 
   const refresh = useCallback(async () => {
-    if (!hasBackendUrl()) {
-      setLoading(false);
-      setError("Backend URL is not configured");
-      return;
-    }
-
     setLoading(true);
     setError(null);
     try {

@@ -5,7 +5,8 @@ import { Inter, Newsreader } from "next/font/google";
 import "./globals.css";
 import Web3ModalProvider from '@/context/Web3ModalProvider';
 import { PlaidProvider } from '@/context/PlaidProvider';
-import PrivyProvider from '@/context/PrivyProvider';
+import SignerProvider from '@/context/SignerProvider';
+import { features } from '@/config/features';
 
 const inter = Inter({
   subsets: ["latin"],
@@ -90,13 +91,16 @@ export default function RootLayout({
             })();
           `}
         </Script>
-        <Script
-          src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"
-          strategy="beforeInteractive"
-        />
+        {/* Plaid Link is only used by TrackFi (backend). */}
+        {features.trackFi ? (
+          <Script
+            src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"
+            strategy="beforeInteractive"
+          />
+        ) : null}
       </head>
       <body className="w-full h-screen bg-[var(--kura-bg)] text-[var(--kura-text)] flex flex-col antialiased selection:bg-[var(--kura-primary)]/30">
-        <PrivyProvider>
+        <SignerProvider>
           <PlaidProvider>
             <Web3ModalProvider>
               <div className="flex flex-col flex-1 min-h-0 overflow-y-auto w-full h-full">
@@ -104,7 +108,7 @@ export default function RootLayout({
               </div>
             </Web3ModalProvider>
           </PlaidProvider>
-        </PrivyProvider>
+        </SignerProvider>
       </body>
     </html>
   );

@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { useAppStore } from '@/store/useAppStore';
 import { Button } from '@/components/ui/button';
+import { features } from '@/config/features';
 
 /** TrackFi surfaces only — Bank / Broker / DeFi. */
 const TRACKFI_UNLOCK_ROUTES = [
@@ -29,7 +30,7 @@ export default function UnlockDataBanner() {
     (route) => pathname === route || pathname.startsWith(`${route}/`),
   );
 
-  if (!isTrackFiRoute || authStatus !== 'authenticated' || isDecryptionReady) {
+  if (!features.e2ee || !isTrackFiRoute || authStatus !== 'authenticated' || isDecryptionReady) {
     return null;
   }
 

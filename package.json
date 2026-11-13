@@ -11,7 +11,8 @@
     "start": "next start",
     "start:standalone": "node .next/standalone/server.js",
     "lint": "eslint",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test \"app/lib/**/__tests__/*.test.ts\""
   },
   "dependencies": {
     "@noble/curves": "^1.8.0",

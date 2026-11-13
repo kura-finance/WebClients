@@ -3,7 +3,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Loader2 } from "lucide-react";
-import { useWallets } from "@privy-io/react-auth";
 import { PORTFOLIO_TOKENS } from "@/lib/portfolioTokens";
 import { fetchCoinGeckoPrices } from "@/lib/coingeckoPrices";
 import { tradingViewSymbol } from "@/lib/tradingViewSymbols";
@@ -18,6 +17,8 @@ import {
 import { buildLiFiSwapCalls, executeLiFiSwapFromSafe } from "@/lib/smartAccountSend";
 import { proposeTreasuryCalls } from "@/lib/proposeTreasuryCalls";
 import { isPimlicoConfigured } from "@/config/env";
+import { useSignerWallet } from "@/lib/signer";
+import { signerCopy } from "@/lib/signer/copy";
 import PrivyEoaSync from "@/components/wallet/PrivyEoaSync";
 import TradingAccountPicker, {
   useTradingAccount,
@@ -68,9 +69,7 @@ export default function MarketDetailView({ symbol }: MarketDetailViewProps) {
     treasury,
   } = useTradingAccount();
   const { applyEoaAddress, record } = personal;
-  const { wallets } = useWallets();
-  const privyWallet =
-    wallets.find((w) => w.walletClientType === "privy") ?? wallets[0] ?? null;
+  const signerWallet = useSignerWallet();
 
   const [price, setPrice] = useState(0);
   const [change24h, setChange24h] = useState(0);
@@ -174,7 +173,7 @@ export default function MarketDetailView({ symbol }: MarketDetailViewProps) {
 
   const canTrade =
     !!scaAddress &&
-    !!privyWallet &&
+    !!signerWallet &&
     !!tradeAddress &&
     (isTreasury || isPimlicoConfigured()) &&
     !!quote &&
@@ -187,11 +186,11 @@ export default function MarketDetailView({ symbol }: MarketDetailViewProps) {
     setTxError(null);
     setTxHash(null);
     setProposedHash(null);
-    if (!canTrade || !quote || !scaAddress || !privyWallet) return;
+    if (!canTrade || !quote || !scaAddress || !signerWallet) return;
 
     setIsSending(true);
     try {
-      const provider = (await privyWallet.getEthereumProvider()) as {
+      const provider = (await signerWallet.getEthereumProvider()) as {
         request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
       };
 
@@ -417,7 +416,7 @@ export default function MarketDetailView({ symbol }: MarketDetailViewProps) {
           ) : null}
           {!scaAddress ? (
             <p className="mb-3 text-xs text-[var(--kura-warning-fg)]">
-              No Smart Wallet found. Sign in with Privy — setup runs automatically.
+              No Smart Wallet found. {signerCopy.signIn} — setup runs automatically.
             </p>
           ) : null}
           {!isTreasury && !isPimlicoConfigured() ? (

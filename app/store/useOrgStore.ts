@@ -395,6 +395,28 @@ export const useOrgStore = create<OrgState>()(
   ),
 );
 
+const ORG_OWNER_KEY = "kura-org-owner";
+
+/**
+ * Local-only mode (no backend): localStorage is the only copy of the workspace,
+ * so sign-out keeps it. Tag it with the signed-in user instead and wipe it only
+ * when a different user signs in on this browser.
+ */
+export function claimOrgWorkspace(ownerId: string): void {
+  if (typeof window === "undefined") return;
+  // No wait on persist hydration: localStorage rehydrates synchronously when the
+  // store is created, so the workspace is already loaded by the time a user signs in.
+  try {
+    const previous = localStorage.getItem(ORG_OWNER_KEY);
+    if (previous && previous !== ownerId) {
+      useOrgStore.getState().resetOrgWorkspace();
+    }
+    localStorage.setItem(ORG_OWNER_KEY, ownerId);
+  } catch {
+    /* storage unavailable */
+  }
+}
+
 /** Active treasury entry (null if none). */
 export function selectActiveTreasury(state: {
   treasuries: OrgTreasury[];

@@ -2,7 +2,6 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { ArrowDownUp, ChevronDown, Loader2 } from "lucide-react";
-import { useWallets } from "@privy-io/react-auth";
 import { HOME_STABLECOINS, type StablecoinBalances, type StablecoinToken } from "@/lib/baseChain";
 import {
   fetchSwapQuote,
@@ -11,8 +10,10 @@ import {
   type SwapQuote,
 } from "@/lib/lifiSwap";
 import { executeLiFiSwapFromSafe } from "@/lib/smartAccountSend";
-import { isPimlicoConfigured, isPrivyConfigured } from "@/config/env";
+import { isPimlicoConfigured } from "@/config/env";
 import { cryptoLogoUrl } from "@/lib/assetLogos";
+import { isSignerConfigured, useSignerWallet } from "@/lib/signer";
+import { signerCopy } from "@/lib/signer/copy";
 import AssetIcon from "@/components/ui/AssetIcon";
 import { Button } from "@/components/ui/button";
 import { Panel, PanelHeader } from "@/components/dashboard/PageShell";
@@ -45,7 +46,7 @@ interface HomeStableSwapPanelProps {
 }
 
 export default function HomeStableSwapPanel(props: HomeStableSwapPanelProps) {
-  if (!isPrivyConfigured) {
+  if (!isSignerConfigured) {
     return (
       <Panel padding="md" className="flex h-full flex-col">
         <PanelHeader title="Swap" description="Stablecoins on Base · Li.Fi" />
@@ -65,9 +66,7 @@ function HomeStableSwapPanelInner({
   balancesLoading = false,
   onSwapped,
 }: HomeStableSwapPanelProps) {
-  const { wallets } = useWallets();
-  const privyWallet =
-    wallets.find((w) => w.walletClientType === "privy") ?? wallets[0] ?? null;
+  const signerWallet = useSignerWallet();
 
   const [fromSymbol, setFromSymbol] = useState("USDC");
   const [toSymbol, setToSymbol] = useState("EURC");
@@ -146,7 +145,7 @@ function HomeStableSwapPanelInner({
 
   const canSwap =
     !!scaAddress &&
-    !!privyWallet &&
+    !!signerWallet &&
     isPimlicoConfigured() &&
     !!quote &&
     !isQuoting &&
@@ -158,11 +157,11 @@ function HomeStableSwapPanelInner({
   const handleSwap = async () => {
     setTxError(null);
     setTxHash(null);
-    if (!canSwap || !quote || !scaAddress || !privyWallet) return;
+    if (!canSwap || !quote || !scaAddress || !signerWallet) return;
 
     setIsSending(true);
     try {
-      const provider = (await privyWallet.getEthereumProvider()) as {
+      const provider = (await signerWallet.getEthereumProvider()) as {
         request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
       };
       const hash = await executeLiFiSwapFromSafe({
@@ -246,7 +245,7 @@ function HomeStableSwapPanelInner({
 
         {!scaAddress ? (
           <p className="text-xs text-[var(--kura-warning-fg)]">
-            Connect with Privy to swap from your Smart Wallet.
+            {signerCopy.connectWith} to swap from your Smart Wallet.
           </p>
         ) : null}
         {scaAddress && !isPimlicoConfigured() ? (

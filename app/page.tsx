@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/button";
 import { useAppStore } from "@/store/useAppStore";
 import { isPrivyConfigured } from "@/context/PrivyProvider";
 import MembershipGate from "@/components/MembershipGate";
+import LocalWalletGate from "@/components/localWallet/LocalWalletGate";
+import { features } from "@/config/features";
 import logoIcon from "./logo.webp";
 import referPreview from "./refer.webp";
 
@@ -101,13 +103,24 @@ export default function RootHubPage() {
         </header>
 
         <div className="flex-1 flex justify-center items-center">
-          <div className="w-full max-w-[760px] rounded-xl border border-[var(--kura-border)] bg-[var(--kura-surface)] overflow-hidden grid grid-cols-1 md:grid-cols-2 shadow-[0_20px_60px_rgba(18,19,26,0.06)]">
-            <section className="bg-[var(--kura-bg)] p-7 md:p-8 border-b md:border-b-0 md:border-r border-[var(--kura-border)] flex flex-col">
+          <div
+            className={`w-full rounded-xl border border-[var(--kura-border)] bg-[var(--kura-surface)] overflow-hidden grid grid-cols-1 shadow-[0_20px_60px_rgba(18,19,26,0.06)] ${
+              features.billing ? "max-w-[760px] md:grid-cols-2" : "max-w-[440px]"
+            }`}
+          >
+            <section
+              className={`bg-[var(--kura-bg)] p-7 md:p-8 flex flex-col ${
+                features.billing ? "border-b md:border-b-0 md:border-r border-[var(--kura-border)]" : ""
+              }`}
+            >
               <h1 className="text-[30px] leading-none font-semibold tracking-tight mb-6">
                 Welcome to Kura
               </h1>
 
-              {isPrivyConfigured ? (
+              {!features.backend ? (
+                // No backend: no account and no Privy — create / import / unlock a browser wallet.
+                <LocalWalletGate />
+              ) : isPrivyConfigured ? (
                 <PrivyLoginButton />
               ) : (
                 <Alert variant="warning">
@@ -119,19 +132,21 @@ export default function RootHubPage() {
               )}
             </section>
 
-            <aside className="p-7 md:p-8 bg-[var(--kura-bg-light)]">
-              <h2 className="text-xl font-semibold mb-2">
-                Refer Friends. Earn 10% Lifetime. Protect More Privacy.
-              </h2>
-              <p className="text-sm text-[var(--kura-text-secondary)] leading-relaxed mb-4">
-                Invite your friends to Kura and earn 10% lifetime commission every time they
-                subscribe to Pro or Ultimate — while they get a full month of Pro for free.
-              </p>
+            {features.billing ? (
+              <aside className="p-7 md:p-8 bg-[var(--kura-bg-light)]">
+                <h2 className="text-xl font-semibold mb-2">
+                  Refer Friends. Earn 10% Lifetime. Protect More Privacy.
+                </h2>
+                <p className="text-sm text-[var(--kura-text-secondary)] leading-relaxed mb-4">
+                  Invite your friends to Kura and earn 10% lifetime commission every time they
+                  subscribe to Pro or Ultimate — while they get a full month of Pro for free.
+                </p>
 
-              <div className="rounded-xl border border-[var(--kura-border)] bg-white overflow-hidden h-44 relative">
-                <Image src={referPreview} alt="Refer preview" fill className="object-cover" />
-              </div>
-            </aside>
+                <div className="rounded-xl border border-[var(--kura-border)] bg-white overflow-hidden h-44 relative">
+                  <Image src={referPreview} alt="Refer preview" fill className="object-cover" />
+                </div>
+              </aside>
+            ) : null}
           </div>
         </div>
       </div>

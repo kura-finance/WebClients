@@ -13,7 +13,8 @@ import {
 } from "lucide-react";
 import { useHomeWallet } from "@/hooks/useHomeWallet";
 import { useAppStore } from "@/store/useAppStore";
-import { isPrivyConfigured } from "@/config/env";
+import { features } from "@/config/features";
+import { isSignerConfigured } from "@/lib/signer";
 import PrivyEoaSync from "@/components/wallet/PrivyEoaSync";
 import BridgeVerifyGate from "@/components/wallet/BridgeVerifyGate";
 import { Button } from "@/components/ui/button";
@@ -63,7 +64,8 @@ function formatUsd(value: number): string {
 export default function AddMoneyView() {
   const wallet = useHomeWallet();
   const userProfile = useAppStore((s) => s.userProfile);
-  const [step, setStep] = useState<Step>("method");
+  // Bank transfers go through Bridge (backend). Without it, crypto is the only method.
+  const [step, setStep] = useState<Step>(features.fiatRamp ? "method" : "crypto");
   const [copied, setCopied] = useState<string | null>(null);
 
   const address = wallet.scaAddress;
@@ -81,11 +83,11 @@ export default function AddMoneyView() {
 
   return (
     <DashboardPage variant="wizard">
-      {isPrivyConfigured ? (
+      {isSignerConfigured ? (
         <PrivyEoaSync onEoa={wallet.applyEoaAddress} persistedEoa={wallet.record.walletAddress} />
       ) : null}
 
-      {step !== "method" ? (
+      {features.fiatRamp && step !== "method" ? (
         <button
           type="button"
           onClick={() => setStep("method")}
@@ -139,7 +141,7 @@ export default function AddMoneyView() {
         </>
       ) : null}
 
-      {step === "bank" ? (
+      {features.fiatRamp && step === "bank" ? (
         <BankTransferPanel
           smartAddress={address}
           defaultName={userProfile.displayName}

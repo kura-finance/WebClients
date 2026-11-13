@@ -24,9 +24,10 @@ import {
   parseMembershipTier,
 } from '@/lib/membership';
 import { useFinanceStore } from './useFinanceStore';
-import { useOrgStore } from './useOrgStore';
+import { claimOrgWorkspace, useOrgStore } from './useOrgStore';
 import { useWalletSessionStore } from './useWalletSessionStore';
 import { resetTreasurySyncProbe } from '@/lib/treasurySync';
+import { features } from '@/config/features';
 
 export type MembershipCheckStatus = 'idle' | 'checking' | 'granted' | 'required';
 
@@ -37,6 +38,27 @@ export interface UserProfile {
   email: string;
   avatarUrl: string;
   membershipLabel: string;
+}
+
+/** Unlocked browser wallet — the whole "session" when there is no backend. */
+export interface LocalSessionUser {
+  /** `local:<lowercased eoa>` */
+  userId: string;
+  /** EOA held in the vault (the Safe owner). */
+  walletAddress: string;
+}
+
+/** No backend: the display name is a local label, kept per wallet in this browser. */
+function localDisplayNameKey(userId: string): string {
+  return `kura-display-name:${userId}`;
+}
+
+function readLocalDisplayName(userId: string): string {
+  try {
+    return localStorage.getItem(localDisplayNameKey(userId)) ?? '';
+  } catch {
+    return '';
+  }
 }
 
 export interface UserPreferences {
@@ -69,6 +91,13 @@ interface AppState {
 
   // 認證方法（Privy 驅動）
   completePrivyLogin: (accessToken: string, identityToken: string | null) => Promise<void>;
+  /**
+   * No-backend mode: an unlocked browser wallet is the session (no account, no
+   * token exchange, no membership check). Pass null when it is locked or absent.
+   */
+  applyLocalSession: (user: LocalSessionUser | null) => void;
+  /** `local:<eoa>` while a browser wallet is unlocked (no-backend mode only). */
+  localUserId: string | null;
   verifyMembership: () => Promise<void>;
   unlockData: () => Promise<void>;
   logout: () => Promise<void>;
@@ -123,12 +152,19 @@ export const useAppStore = create<AppState>((set) => ({
   authError: null,
   e2eeError: null,
   membershipCheckStatus: 'idle',
+  localUserId: null,
 
   // 認證方法（Privy 驅動）
   verifyMembership: async () => {
     const state = useAppStore.getState();
     if (state.authStatus !== 'authenticated') {
       set({ membershipCheckStatus: 'idle' });
+      return;
+    }
+
+    if (!features.billing) {
+      // No plans without a backend — every signed-in user has full access.
+      set({ membershipCheckStatus: 'granted' });
       return;
     }
 
@@ -204,6 +240,35 @@ export const useAppStore = create<AppState>((set) => ({
     }
   },
 
+  applyLocalSession: (user) => {
+    if (!user) {
+      if (useAppStore.getState().localUserId) set({ localUserId: null });
+      if (useAppStore.getState().authStatus === 'unauthenticated') return;
+      useWalletSessionStore.getState().clearWalletSession();
+      useAppStore.getState().clearAuthSession();
+      return;
+    }
+
+    claimOrgWorkspace(user.userId);
+    useWalletSessionStore.getState().clearWalletSession();
+    useWalletSessionStore.getState().setEoaOverride(user.walletAddress);
+    set({
+      authToken: null,
+      authStatus: 'authenticated',
+      isDecryptionReady: false,
+      needsKeyPairSetup: false,
+      userProfile: {
+        displayName: readLocalDisplayName(user.userId),
+        email: '',
+        avatarUrl: '',
+        membershipLabel: '',
+      },
+      authError: null,
+      membershipCheckStatus: 'granted',
+      localUserId: user.userId,
+    });
+  },
+
   // 用 Passkey 解鎖 E2EE 資料層（需使用者手勢觸發 WebAuthn）
   unlockData: async () => {
     try {
@@ -240,10 +305,16 @@ export const useAppStore = create<AppState>((set) => ({
   logout: async () => {
     try {
       console.info('[AppStore] Logging out');
-      await logoutUser().catch(() => undefined);
+      if (features.backend) {
+        await logoutUser().catch(() => undefined);
+      }
       clearCryptoSession();
       clearPlaidCache();
-      useOrgStore.getState().resetOrgWorkspace();
+      // Without a backend the workspace only lives in localStorage — keep it
+      // for this user's next sign-in (see claimOrgWorkspace).
+      if (features.backend) {
+        useOrgStore.getState().resetOrgWorkspace();
+      }
       useWalletSessionStore.getState().clearWalletSession();
       resetTreasurySyncProbe();
       set({
@@ -294,6 +365,15 @@ export const useAppStore = create<AppState>((set) => ({
 
   hydrateFromStorage: async () => {
     try {
+      if (!features.backend) {
+        // No backend session to restore: LocalWalletBridge resolves authStatus once
+        // it has read the vault, so stay 'loading' until then (no flash, no loop).
+        if (typeof window !== 'undefined') {
+          set({ isBalanceHidden: localStorage.getItem('kura-hide-balance') === '1' });
+        }
+        return;
+      }
+
       console.debug('[AppStore] Hydrating from storage');
       set({ authStatus: 'loading' });
 
@@ -345,6 +425,21 @@ export const useAppStore = create<AppState>((set) => ({
 
   // 使用者方法
   setDisplayName: async (displayName) => {
+    if (!features.accountProfile) {
+      // No backend: a local label for this wallet, stored in this browser only.
+      const { localUserId } = useAppStore.getState();
+      const name = displayName.trim().slice(0, 64);
+      if (localUserId) {
+        try {
+          if (name) localStorage.setItem(localDisplayNameKey(localUserId), name);
+          else localStorage.removeItem(localDisplayNameKey(localUserId));
+        } catch {
+          /* storage unavailable — keep it for this session only */
+        }
+      }
+      set((state) => ({ userProfile: { ...state.userProfile, displayName: name } }));
+      return;
+    }
     try {
       console.debug('[AppStore] Updating display name', { displayName });
       const response = await updateCurrentUserProfile({ displayName });

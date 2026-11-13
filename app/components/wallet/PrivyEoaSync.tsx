@@ -1,9 +1,8 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { useWallets } from "@privy-io/react-auth";
 import { saveEoaAddress } from "@/lib/walletApi";
-import { isPrivyConfigured } from "@/config/env";
+import { isSignerConfigured, useSignerWallet } from "@/lib/signer";
 
 interface PrivyEoaSyncProps {
   onEoa: (address: string) => void;
@@ -11,17 +10,16 @@ interface PrivyEoaSyncProps {
 }
 
 /**
- * Discovers Privy embedded EOA and persists it via /api/wallet/eoa.
- * Must render under PrivyProvider.
+ * Discovers the signer EOA (Privy embedded wallet, or the browser wallet when
+ * there is no backend) and persists it via /api/wallet/eoa in backend mode.
  */
 export default function PrivyEoaSync({ onEoa, persistedEoa }: PrivyEoaSyncProps) {
-  const { wallets } = useWallets();
+  const signerWallet = useSignerWallet();
   const savedRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!isPrivyConfigured) return;
-    const embedded =
-      wallets.find((w) => w.walletClientType === "privy")?.address ?? wallets[0]?.address ?? null;
+    if (!isSignerConfigured) return;
+    const embedded = signerWallet?.address ?? null;
     if (!embedded) return;
 
     onEoa(embedded);
@@ -33,7 +31,7 @@ export default function PrivyEoaSync({ onEoa, persistedEoa }: PrivyEoaSyncProps)
     void saveEoaAddress(embedded).catch(() => {
       savedRef.current = null;
     });
-  }, [wallets, onEoa, persistedEoa]);
+  }, [signerWallet, onEoa, persistedEoa]);
 
   return null;
 }

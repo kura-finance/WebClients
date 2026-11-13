@@ -1,6 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { features } from '@/config/features';
 
 interface PlaidContextType {
   isPlaidReady: boolean;
@@ -14,6 +15,9 @@ export function PlaidProvider({ children }: { children: ReactNode }) {
   const [plaidError, setPlaidError] = useState<string | null>(null);
 
   useEffect(() => {
+    // TrackFi off → the Plaid script is not loaded (see app/layout.tsx); nothing to wait for.
+    if (!features.trackFi) return;
+
     // 檢查 Plaid 是否已可用
     if (typeof window !== 'undefined' && window.Plaid) {
       setIsPlaidReady(true);

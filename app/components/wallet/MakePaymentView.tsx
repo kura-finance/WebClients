@@ -12,10 +12,12 @@ import {
   RefreshCw,
   ShieldCheck,
 } from "lucide-react";
-import { useWallets } from "@privy-io/react-auth";
 import { useHomeWallet } from "@/hooks/useHomeWallet";
 import { useAppStore } from "@/store/useAppStore";
-import { isPimlicoConfigured, isPrivyConfigured } from "@/config/env";
+import { isPimlicoConfigured } from "@/config/env";
+import { features } from "@/config/features";
+import { isSignerConfigured, useSignerWallet, type SignerWallet } from "@/lib/signer";
+import { signerCopy } from "@/lib/signer/copy";
 import PrivyEoaSync from "@/components/wallet/PrivyEoaSync";
 import BridgeVerifyGate from "@/components/wallet/BridgeVerifyGate";
 import { Button } from "@/components/ui/button";
@@ -75,21 +77,20 @@ function basescanTx(hash: string): string {
 export default function MakePaymentView() {
   const wallet = useHomeWallet();
   const userProfile = useAppStore((s) => s.userProfile);
-  const { wallets } = useWallets();
-  const [step, setStep] = useState<Step>("method");
+  const signerWallet = useSignerWallet();
+  // Bank payouts go through Bridge (backend). Without it, crypto is the only method.
+  const [step, setStep] = useState<Step>(features.fiatRamp ? "method" : "crypto");
 
   const balance = wallet.stableBalances.USDC ?? 0;
   const sca = wallet.scaAddress;
-  const privyWallet =
-    wallets.find((w) => w.walletClientType === "privy") ?? wallets[0] ?? null;
 
   return (
     <DashboardPage variant="wizard">
-      {isPrivyConfigured ? (
+      {isSignerConfigured ? (
         <PrivyEoaSync onEoa={wallet.applyEoaAddress} persistedEoa={wallet.record.walletAddress} />
       ) : null}
 
-      {step !== "method" ? (
+      {features.fiatRamp && step !== "method" ? (
         <button
           type="button"
           onClick={() => setStep("method")}
@@ -144,16 +145,16 @@ export default function MakePaymentView() {
         <CryptoSendPanel
           balance={balance}
           scaAddress={sca}
-          privyWallet={privyWallet}
+          signerWallet={signerWallet}
           onSent={() => void wallet.refresh()}
         />
       ) : null}
 
-      {step === "bank" ? (
+      {features.fiatRamp && step === "bank" ? (
         <BankPayoutPanel
           balance={balance}
           scaAddress={sca}
-          privyWallet={privyWallet}
+          signerWallet={signerWallet}
           defaultName={userProfile.displayName}
           defaultEmail={userProfile.email}
           onSent={() => void wallet.refresh()}
@@ -193,20 +194,16 @@ function MethodRow({
   );
 }
 
-type PrivyWalletLike = {
-  getEthereumProvider: () => Promise<unknown>;
-  address?: string;
-} | null;
 
 function CryptoSendPanel({
   balance,
   scaAddress,
-  privyWallet,
+  signerWallet,
   onSent,
 }: {
   balance: number;
   scaAddress: string | null;
-  privyWallet: PrivyWalletLike;
+  signerWallet: SignerWallet | null;
   onSent: () => void;
 }) {
   const [chain, setChain] = useState<BridgeChain>(BASE_CHAIN);
@@ -232,7 +229,7 @@ function CryptoSendPanel({
 
   const canSend =
     !!scaAddress &&
-    !!privyWallet &&
+    !!signerWallet &&
     isPimlicoConfigured() &&
     isValidAddress &&
     numericAmount > 0 &&
@@ -301,11 +298,11 @@ function CryptoSendPanel({
     setError(null);
     setTxHash(null);
     if (!scaAddress) {
-      setError("No Smart Wallet found. Sign in with Privy — setup runs automatically.");
+      setError(`No Smart Wallet found. ${signerCopy.signIn} — setup runs automatically.`);
       return;
     }
-    if (!privyWallet) {
-      setError("Privy wallet not ready. Sign in again and retry.");
+    if (!signerWallet) {
+      setError(signerCopy.walletNotReady);
       return;
     }
     if (!isPimlicoConfigured()) {
@@ -331,7 +328,7 @@ function CryptoSendPanel({
 
     setIsSending(true);
     try {
-      const provider = (await privyWallet.getEthereumProvider()) as {
+      const provider = (await signerWallet.getEthereumProvider()) as {
         request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
       };
       const hash = isBridge
@@ -547,14 +544,14 @@ function CryptoSendPanel({
 function BankPayoutPanel({
   balance,
   scaAddress,
-  privyWallet,
+  signerWallet,
   defaultName,
   defaultEmail,
   onSent,
 }: {
   balance: number;
   scaAddress: string | null;
-  privyWallet: PrivyWalletLike;
+  signerWallet: SignerWallet | null;
   defaultName: string;
   defaultEmail: string;
   onSent: () => void;
@@ -596,7 +593,7 @@ function BankPayoutPanel({
   const numericAmount = Number(amount);
   const canSend =
     !!scaAddress &&
-    !!privyWallet &&
+    !!signerWallet &&
     !!payoutAddress?.depositAddress &&
     isPimlicoConfigured() &&
     numericAmount > 0 &&
@@ -711,7 +708,7 @@ function BankPayoutPanel({
   const handleSend = async () => {
     setError(null);
     setTxHash(null);
-    if (!scaAddress || !privyWallet || !payoutAddress?.depositAddress) return;
+    if (!scaAddress || !signerWallet || !payoutAddress?.depositAddress) return;
     if (!(numericAmount > 0) || numericAmount > balance) {
       setError("Enter a valid amount within your balance.");
       return;
@@ -723,7 +720,7 @@ function BankPayoutPanel({
 
     setIsSending(true);
     try {
-      const provider = (await privyWallet.getEthereumProvider()) as {
+      const provider = (await signerWallet.getEthereumProvider()) as {
         request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
       };
       const hash = await sendUsdcFromSafe({

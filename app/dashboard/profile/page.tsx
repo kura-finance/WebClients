@@ -9,8 +9,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { useAppStore } from '@/store/useAppStore';
 import { DashboardPage, PageHeader } from '@/components/dashboard/PageShell';
+import LocalProfile from '@/components/localWallet/LocalProfile';
+import { features } from '@/config/features';
 
+/** Backend: account profile. No backend: local display name + wallet addresses. */
 export default function ProfilePage() {
+  return features.accountProfile ? <AccountProfile /> : <LocalProfile />;
+}
+
+function AccountProfile() {
   const router = useRouter();
   const { userProfile, setDisplayName, deleteAccount } = useAppStore();
   const membershipLabel = userProfile.membershipLabel;

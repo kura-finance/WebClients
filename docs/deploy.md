@@ -14,12 +14,12 @@ Related: [environment template](../.env.example) · [architecture](architecture.
 |------|--------|
 | Node.js **24** | Matches the production Dockerfile |
 | npm | `npm ci --legacy-peer-deps` in Docker |
-| A **backend** (`backendserver`) | Auth, Treasuries, TrackFi, Stripe, passkeys, Dinari |
-| Privy app | Login + embedded EOA |
-| Reown project | External wallet connect |
+| A **backend** (`backendserver`) — optional | Treasuries sync, TrackFi, bank transfers, Stripe, passkeys, Dinari |
+| Privy app — backend mode only | Login + embedded EOA |
+| Reown project — backend mode only | External wallet connect (TrackFi) |
 | GCP project (production) | Artifact Registry / GCR + Cloud Run |
 
-Full TrackFi, Treasuries persistence, billing, passkeys, and tokenized stocks require a correctly configured backend. On-chain Earn / Borrow / Approvals can still run with Privy, Base RPC, and Pimlico alone.
+Full TrackFi, server-side Treasuries persistence, bank transfers, billing, passkeys, and tokenized stocks require a correctly configured backend. With `NEXT_PUBLIC_BACKEND_URL` empty the app runs with a Base RPC and Pimlico alone — no Privy, no account: the user's key lives in a password-encrypted vault in their browser. Available: Smart Wallet, Treasury (browser-local list), Approvals, Team, Report, Earn, Borrow, Markets. Serve it over HTTPS (WebCrypto needs a secure context) and treat the deployed bundle as part of the wallet: whoever can change it can take users' keys.
 
 ---
 
@@ -31,7 +31,7 @@ cp .env.example .env.local   # fill your keys
 npm run dev
 ```
 
-App origin defaults to `http://localhost:3000`. Point `NEXT_PUBLIC_BACKEND_URL` at a running API (example: `http://localhost:8080`).
+App origin defaults to `http://localhost:3000`. Leave `NEXT_PUBLIC_BACKEND_URL` empty for the on-chain-only app, or point it at a running API (example: `http://localhost:8080`) to enable the backend features.
 
 Checks:
 
@@ -61,10 +61,10 @@ Publishable keys are visible to every user of that build. Treat leaks as rotatio
 
 | Variable | Purpose |
 |----------|---------|
-| `NEXT_PUBLIC_BACKEND_URL` | Kura API (no trailing slash) |
+| `NEXT_PUBLIC_BACKEND_URL` | Kura API (no trailing slash). Optional — empty disables backend features |
 | `NEXT_PUBLIC_APP_URL` | Web origin (CORS, CSP, WebAuthn, Privy) |
-| `NEXT_PUBLIC_PRIVY_APP_ID` | Login |
-| `NEXT_PUBLIC_REOWN_PROJECT_ID` | Reown AppKit |
+| `NEXT_PUBLIC_PRIVY_APP_ID` | Login — backend mode only (unused without a backend) |
+| `NEXT_PUBLIC_REOWN_PROJECT_ID` | Reown AppKit — backend mode only |
 
 ### On-chain product
 

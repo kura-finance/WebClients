@@ -5,6 +5,7 @@
 | Principle | Implication |
 |-----------|-------------|
 | **Clear boundaries** | Browser client vs Kura API vs third-party SaaS are separate. |
+| **Two modes** | Default (no backend): no account, no Privy, the user's key is in a password-encrypted vault in their browser. Backend mode: Privy login + embedded wallet + Kura API features. |
 | **Honest residual trust** | DeFi / auth / banking vendors cannot be eliminated by client code alone. |
 | **E2EE for TrackFi** | Bank/CEX plaintext is intended to exist in browser memory only after passkey unlock. |
 | **MIT source** | This client is MIT-licensed ([LICENSE](../LICENSE)); hosted API and vendor keys remain outside the repo. |
@@ -14,7 +15,8 @@
 | Component | Note |
 |-----------|------|
 | Next.js UI and routing | Full product surface for web |
-| Client crypto helpers | Passkey unlock + finance vault |
+| Client crypto helpers | Passkey unlock + finance vault (backend mode) |
+| Browser wallet | Key generation / import, password vault, local signing (`app/lib/localWallet`, no-backend mode) |
 | API clients | Kura backend + public chain APIs |
 | CSP policy | `proxy.ts` |
 | Deploy workflow | GitHub Actions → GCR → Cloud Run (official repo only) |
@@ -25,7 +27,7 @@
 | Component | Note |
 |-----------|------|
 | **Kura API** | Session, Treasuries DB, Plaid tokens, Stripe secrets, Dinari, ciphertext storage |
-| **Privy** | Identity / embedded wallet infrastructure |
+| **Privy** | Identity / embedded wallet infrastructure (backend mode only) |
 | **Plaid** | Bank linking (tokens server-side) |
 | **Pimlico** | ERC-4337 bundler / paymaster |
 | **Dinari** | Tokenized stock broker / KYC |
@@ -34,6 +36,15 @@
 | **Production secrets** | Never stored in git |
 
 ## Client security behaviours
+
+No backend (default):
+
+1. The key never leaves the browser. It is stored only as AES-256-GCM ciphertext under a key derived from the user's password (PBKDF2-HMAC-SHA256, 600 000 iterations).
+2. The decrypted key exists only in page memory while unlocked; reload, closing the tab, "Lock" or 15 idle minutes drop it.
+3. Revealing the recovery phrase / private key and removing the wallet ask for the password again.
+4. No Privy, no backend, no account: nothing can reset the password or restore the key.
+
+Backend mode:
 
 1. Privy login → backend exchange → HttpOnly session cookie
 2. TrackFi decrypt only after WebAuthn PRF unlock
@@ -46,7 +57,8 @@
 
 | Party | What you still trust |
 |-------|----------------------|
-| Privy | Auth integrity and availability |
+| Whoever serves this web app | The JavaScript you are served: it handles the decrypted key (no-backend mode) |
+| Privy (backend mode) | Auth integrity and availability |
 | Pimlico | UserOp inclusion / paymaster behaviour |
 | Alchemy (or RPC) | Honest chain reads |
 | Morpho API | Market / vault metadata integrity |
@@ -54,9 +66,9 @@
 | Li.Fi | Quote / route integrity |
 | Dinari | KYC, quotes, and settlement |
 | TradingView | Chart feeds |
-| Kura backend | Ciphertext storage, Plaid orchestration, no malicious payloads |
-| End-user browser | No malware / hostile extensions after unlock |
+| Kura backend (backend mode) | Ciphertext storage, Plaid orchestration, no malicious payloads |
+| End-user browser | No malware / hostile extensions after unlock; keeps (or loses) the stored vault |
 
 ## Dual-repo dependency
 
-Full TrackFi, Treasury persistence, billing, passkeys, and Dinari **require** a backend deployment. The web client alone can still exercise some on-chain flows (Morpho / Approvals) if RPC, Pimlico, and Privy are configured — that is not the complete product.
+Privy login, full TrackFi, server-side Treasury persistence, billing, passkeys, and Dinari **require** a backend deployment. The web client alone is the on-chain wallet (Smart Wallet, Treasury, Approvals, Team, Earn / Borrow / Markets) with the key in the browser vault; it needs only a Base RPC and Pimlico.

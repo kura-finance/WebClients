@@ -10,6 +10,8 @@ Next.js dashboard for [app.kura-finance.com](https://app.kura-finance.com): pers
 
 The hosted **API** and **mobile wallet** are separate products. This repository is the browser app only.
 
+The backend is **optional**. With `NEXT_PUBLIC_BACKEND_URL` empty (the default) the app is a self-custodial, on-chain wallet with no account, no backend and no Privy: you create or import a key in the browser (12-word recovery phrase or private key), it is stored in a password-encrypted vault in that browser, and the app only talks to Base RPC / public APIs. The same recovery phrase gives the same wallet in the mobile app. Pointing the build at a self-hosted backend switches to Privy login and turns the backend features back on — see [docs/product-overview.md](docs/product-overview.md) and [docs/threat-model.md](docs/threat-model.md).
+
 ---
 
 ## What it does
@@ -20,9 +22,13 @@ The hosted **API** and **mobile wallet** are separate products. This repository 
 - **Team** (Safe owners / threshold) and **Report** (treasury activity)
 - **Earn / Borrow** (Morpho on Base)
 - **Markets** (spot crypto / Li.Fi) with TradingView charts
+
+Only with a backend configured (hidden otherwise):
+
 - **Tokenized stocks** (Dinari dShares on Base, via the Kura API)
 - **Card** waitlist (metal / virtual)
 - **TrackFi** — Bank (Plaid), Broker, DeFi (DeBank), CEX — via the Kura backend and passkey E2EE
+- **Bank transfers** in Add Money / Transfer (Bridge)
 - **Billing** (Stripe subscription UI)
 
 ---
@@ -32,15 +38,16 @@ The hosted **API** and **mobile wallet** are separate products. This repository 
 ```bash
 npm install
 cp .env.example .env.local
-# Set NEXT_PUBLIC_BACKEND_URL, NEXT_PUBLIC_PRIVY_APP_ID, NEXT_PUBLIC_REOWN_PROJECT_ID
+# Leave NEXT_PUBLIC_BACKEND_URL empty for the on-chain-only app (no other key is required to start)
 npm run dev
 ```
 
-Minimum env to see login: backend URL, app URL, Privy app ID, Reown project ID. Smart Wallet paths also need Pimlico and a Base RPC. Full list and production Cloud Run steps: **[docs/deploy.md](docs/deploy.md)**.
+Nothing is required to open the app and create a wallet. Sending from the Smart Wallet needs Pimlico, and a Base RPC is recommended. A backend URL, a Privy app ID and a Reown project ID are only needed for backend mode. Full list and production Cloud Run steps: **[docs/deploy.md](docs/deploy.md)**.
 
 ```bash
 npm run lint
 npx tsc --noEmit
+npm test
 npm run build
 ```
 
@@ -64,7 +71,7 @@ npm run build
 
 | System | Role |
 |--------|------|
-| **backendserver** | API (`api.kura-finance.com`) — auth, Treasuries, TrackFi, Stripe, passkeys, Dinari |
+| **backendserver** | API (`api.kura-finance.com`), optional — auth, Treasuries sync, TrackFi, Stripe, passkeys, Dinari |
 | **mobile-app** | React Native wallet (iOS / Android) |
 
 Security reports: **security@kura-finance.com**

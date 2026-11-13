@@ -10,6 +10,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Separator } from '@/components/ui/separator';
 import { useAppStore } from '@/store/useAppStore';
 import { useKuraLogout } from '@/components/PrivyAuthBridge';
+import { features } from '@/config/features';
+import { useWalletSessionStore } from '@/store/useWalletSessionStore';
 
 type ThemeMode = 'light' | 'dark' | 'system';
 
@@ -41,6 +43,13 @@ export default function UserSettingsDrawer({ isOpen, onClose, anchorRef }: UserS
   const [isAppearanceOpen, setIsAppearanceOpen] = useState(false);
   const router = useRouter();
   const userProfile = useAppStore((state) => state.userProfile);
+  // No backend: there is no email — identify the session by the wallet address.
+  const walletAddress = useWalletSessionStore((state) => state.eoaOverride);
+  const accountLine = features.backend
+    ? userProfile.email
+    : walletAddress
+      ? `${walletAddress.slice(0, 6)}…${walletAddress.slice(-4)}`
+      : '';
   const logout = useKuraLogout();
 
   useEffect(() => {
@@ -128,8 +137,8 @@ export default function UserSettingsDrawer({ isOpen, onClose, anchorRef }: UserS
                   )}
                 </div>
                 <div>
-                  <CardTitle className="text-base">{userProfile.displayName || 'User'}</CardTitle>
-                  <CardDescription>{userProfile.email}</CardDescription>
+                  <CardTitle className="text-base">{userProfile.displayName || (features.backend ? 'User' : 'Wallet')}</CardTitle>
+                  <CardDescription>{accountLine}</CardDescription>
                 </div>
               </CardHeader>
 
@@ -142,9 +151,11 @@ export default function UserSettingsDrawer({ isOpen, onClose, anchorRef }: UserS
                   <Button variant="ghost" className="justify-start" onClick={() => handleMenuClick(() => router.push('/settings/security'))}>
                     Security
                   </Button>
-                  <Button variant="ghost" className="justify-start" onClick={() => handleMenuClick(() => router.push('/settings/plan-billing'))}>
-                    Plan & Billing
-                  </Button>
+                  {features.billing ? (
+                    <Button variant="ghost" className="justify-start" onClick={() => handleMenuClick(() => router.push('/settings/plan-billing'))}>
+                      Plan & Billing
+                    </Button>
+                  ) : null}
                   <Button variant="ghost" className="justify-start" asChild>
                     <a href="https://kura-finance.com/privacy" target="_blank" rel="noopener noreferrer">
                       Privacy ↗
@@ -215,8 +226,9 @@ export default function UserSettingsDrawer({ isOpen, onClose, anchorRef }: UserS
                   </AnimatePresence>
                 </div>
                 <Separator />
+                {/* No backend: there is no account to log out of — this locks the browser wallet. */}
                 <Button variant="destructive" className="w-full" onClick={handleLogout}>
-                  Log Out
+                  {features.backend ? 'Log Out' : 'Lock'}
                 </Button>
               </CardContent>
             </Card>

@@ -14,7 +14,6 @@ import {
   Users,
   Wallet,
 } from "lucide-react";
-import { useWallets } from "@privy-io/react-auth";
 import {
   createWalletClient,
   custom,
@@ -43,7 +42,8 @@ import {
   confirmationCount,
   type SafeMultisigTx,
 } from "@/lib/safeTxService";
-import { isPrivyConfigured } from "@/config/env";
+import { isSignerConfigured, useSignerWallet } from "@/lib/signer";
+import { signerCopy } from "@/lib/signer/copy";
 import PrivyEoaSync from "@/components/wallet/PrivyEoaSync";
 import TreasurySwitcher from "@/components/wallet/TreasurySwitcher";
 import { Button } from "@/components/ui/button";
@@ -93,15 +93,7 @@ export default function OrgApprovalsView() {
   const personal = useHomeWallet();
   const treasury = useTreasuryWallet();
   const pending = useTreasuryPendingTxs(treasury.scaAddress);
-  const { wallets } = useWallets();
-  const privyWallet = useMemo(() => {
-    return (
-      wallets.find((w) => w.walletClientType === "privy") ??
-      wallets.find((w) => w.address?.toLowerCase() === personal.eoaAddress?.toLowerCase()) ??
-      wallets[0] ??
-      null
-    );
-  }, [wallets, personal.eoaAddress]);
+  const signerWallet = useSignerWallet(personal.eoaAddress);
 
   const owners = treasury.safeSigners?.owners ?? [];
   const safeThreshold = treasury.safeSigners?.threshold ?? 1;
@@ -157,11 +149,11 @@ export default function OrgApprovalsView() {
     isSigner && proposeDestValid && proposeAmountValid && !formBusy && !!treasury.scaAddress;
 
   const getWalletClient = async () => {
-    if (!privyWallet) throw new Error("Privy wallet unavailable. Sign in again.");
+    if (!signerWallet) throw new Error(signerCopy.walletUnavailable);
     if (!personal.eoaAddress || !isEthAddress(personal.eoaAddress)) {
-      throw new Error("Connect your Privy EOA first.");
+      throw new Error(signerCopy.connectEoaFirst);
     }
-    const provider = (await privyWallet.getEthereumProvider()) as {
+    const provider = (await signerWallet.getEthereumProvider()) as {
       request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
     };
     const walletClient = createWalletClient({
@@ -363,7 +355,7 @@ export default function OrgApprovalsView() {
   if (!treasury.bound) {
     return (
       <>
-        {isPrivyConfigured ? (
+        {isSignerConfigured ? (
           <PrivyEoaSync onEoa={personal.applyEoaAddress} persistedEoa={personal.record.walletAddress} />
         ) : null}
         <EmptyGate
@@ -382,7 +374,7 @@ export default function OrgApprovalsView() {
 
   return (
     <DashboardPage>
-      {isPrivyConfigured ? (
+      {isSignerConfigured ? (
         <PrivyEoaSync onEoa={personal.applyEoaAddress} persistedEoa={personal.record.walletAddress} />
       ) : null}
 
@@ -622,7 +614,7 @@ export default function OrgApprovalsView() {
 
             {!isSigner ? (
               <div className="mb-5 rounded-xl border border-[var(--kura-warning-border)] bg-[var(--kura-warning-bg)] px-4 py-3 text-sm text-[var(--kura-warning-fg)]">
-                Your Privy EOA is not an owner of this Treasury Safe. Ask a signer to propose, or
+                Your {signerCopy.eoa} is not an owner of this Treasury Safe. Ask a signer to propose, or
                 update owners under{" "}
                 <Link href="/dashboard/team" className="font-semibold underline">
                   Team

@@ -2,13 +2,14 @@
 
 import React from 'react';
 import { useAppStore } from '@/store/useAppStore';
+import { isSignerConfigured } from "@/lib/signer";
 import { useRouter } from 'next/navigation';
 import { Card, CardContent } from '@/components/ui/card';
 import TopNav from '@/components/TopNav';
 import AppSidebar from '@/components/AppSidebar';
 import UnlockDataBanner from '@/components/UnlockDataBanner';
 import DashboardWalletBootstrap from '@/components/wallet/DashboardWalletBootstrap';
-import { isPrivyConfigured } from '@/config/env';
+import FeatureRouteGuard from '@/components/FeatureRouteGuard';
 
 export default function DashboardLayout({
   children,
@@ -64,9 +65,9 @@ export default function DashboardLayout({
       <main className="relative z-30 flex-1 overflow-y-auto bg-[var(--kura-bg)] w-full min-w-0">
         <TopNav />
         <UnlockDataBanner />
-        {isPrivyConfigured ? <DashboardWalletBootstrap /> : null}
+        {isSignerConfigured ? <DashboardWalletBootstrap /> : null}
         <div className="mx-auto w-full max-w-[1600px]">
-          {children}
+          <FeatureRouteGuard>{children}</FeatureRouteGuard>
         </div>
       </main>
     </div>

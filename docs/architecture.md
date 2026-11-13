@@ -5,7 +5,7 @@
 | Layer | Technology |
 |-------|------------|
 | Framework | Next.js (App Router), React 19 |
-| Auth UX | Privy |
+| Key / sign-in | Browser wallet vault (no backend) · Privy (backend mode) |
 | State | Zustand |
 | On-chain (Base) | viem, permissionless / Pimlico, Safe |
 | DeFi data | Morpho GraphQL |
@@ -34,6 +34,19 @@
      waitlist                      TradingView
 ```
 
+The Kura API (left branch) is **optional**. `app/config/features.ts` derives one flag per product area from `NEXT_PUBLIC_BACKEND_URL`. When it is empty the client only uses the right branch, without Privy: an unlocked browser wallet is the app session (no account, token exchange or membership check), the personal Safe address is derived locally from that wallet's EOA (`app/lib/personalSafe.ts`), the Treasury list lives in localStorage, and backend-only routes and UI are hidden (`FeatureRouteGuard` redirects direct visits to `/dashboard`).
+
+### Key custody: the signer
+
+Every component that signs goes through `app/lib/signer` (`useSignerWallet()` → `{ address, getEthereumProvider() }`, `useSignerSession()`). The implementation is chosen once from the build-time flag:
+
+| Mode | Signer | Session |
+|------|--------|---------|
+| No backend (default) | `app/lib/localWallet` — key generated (12-word BIP-39, `m/44'/60'/0'/0/0`, same as mobile) or imported in the browser, stored encrypted, decrypted into memory on unlock; a local EIP-1193 provider signs with it and forwards reads to the Base RPC | `LocalWalletBridge`: authenticated ⇔ vault unlocked |
+| Backend | Privy embedded EOA (`<PrivyProvider>`) | `PrivyAuthBridge`: Privy token → Kura session cookie |
+
+Vault record (`localStorage["kura-wallet-vault-v1"]`): `{ v: 1, kdf: "PBKDF2-SHA256", iterations: 600000, salt, iv, ciphertext, eoaAddress }` — PBKDF2-HMAC-SHA256 (600 000 iterations, 16-byte salt) → AES-256-GCM (12-byte IV, header as additional data), WebCrypto only. The decrypted key is held in memory only; reload, closing the tab, "Lock" or 15 idle minutes drop it. In this mode `<PrivyProvider>` is not mounted and no Privy host is contacted. See [threat-model.md](threat-model.md).
+
 ## Route map
 
 | Area | Primary routes |
@@ -60,7 +73,7 @@
 
 ## Backend domain alignment
 
-Same API family as mobile. Representative modules:
+Same API family as mobile; used only when a backend is configured. Representative modules:
 
 | Backend domain | Client module | Purpose |
 |----------------|---------------|---------|
@@ -95,7 +108,9 @@ Production: Next rewrites `/api/*` → backend (`next.config.ts`).
 | Env centralization | `app/config/env.ts` |
 | CSP / headers | `proxy.ts` |
 | Passkey + finance vault | `app/lib/crypto/` |
-| Session bootstrap | `PrivyAuthBridge`, `AppSessionHydrator` |
+| Session bootstrap | `SignerProvider` → `LocalWalletBridge` (no backend) or `PrivyAuthBridge` (backend), `AppSessionHydrator` |
+| Browser wallet vault | `app/lib/localWallet/` (`npm test`) |
+| Signer abstraction | `app/lib/signer/` |
 
 ## Repository layout
 

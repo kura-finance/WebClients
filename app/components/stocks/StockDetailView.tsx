@@ -3,7 +3,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Loader2 } from "lucide-react";
-import { useWallets } from "@privy-io/react-auth";
 import {
   findStockMeta,
   formatStockPrice,
@@ -27,7 +26,9 @@ import {
   signMessageFromSafe,
   signTypedDataFromSafe,
 } from "@/lib/smartAccountSend";
-import { isPimlicoConfigured, isPrivyConfigured } from "@/config/env";
+import { isPimlicoConfigured } from "@/config/env";
+import { isSignerConfigured, useSignerWallet } from "@/lib/signer";
+import { signerCopy } from "@/lib/signer/copy";
 import PrivyEoaSync from "@/components/wallet/PrivyEoaSync";
 import TradingAccountPicker, {
   useTradingAccount,
@@ -61,9 +62,7 @@ export default function StockDetailView({ symbol }: StockDetailViewProps) {
     treasury,
   } = useTradingAccount();
   const { refresh, applyEoaAddress, record } = personal;
-  const { wallets } = useWallets();
-  const privyWallet =
-    wallets.find((w) => w.walletClientType === "privy") ?? wallets[0] ?? null;
+  const signerWallet = useSignerWallet();
 
   const [quote, setQuote] = useState<StockQuoteRow | null>(null);
   const [side, setSide] = useState<"buy" | "sell">("buy");
@@ -171,10 +170,10 @@ export default function StockDetailView({ symbol }: StockDetailViewProps) {
   }, [scaAddress]);
 
   const ensureWalletLinked = async () => {
-    if (!scaAddress || !privyWallet) throw new Error("Smart Wallet / Privy not ready.");
+    if (!scaAddress || !signerWallet) throw new Error(signerCopy.smartWalletNotReady);
     if (walletLinked) return;
     const nonce = await getWalletNonce(scaAddress);
-    const provider = (await privyWallet.getEthereumProvider()) as {
+    const provider = (await signerWallet.getEthereumProvider()) as {
       request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
     };
     const signature = await signMessageFromSafe({
@@ -208,7 +207,7 @@ export default function StockDetailView({ symbol }: StockDetailViewProps) {
   const handleTrade = async () => {
     setError(null);
     setSuccess(null);
-    if (!meta || !stockId || !scaAddress || !privyWallet) return;
+    if (!meta || !stockId || !scaAddress || !signerWallet) return;
     if (isTreasury) {
       setError("Stock orders use Smart Wallet signing. Switch to Smart Wallet to trade.");
       return;
@@ -225,7 +224,7 @@ export default function StockDetailView({ symbol }: StockDetailViewProps) {
     setIsBusy(true);
     try {
       await ensureWalletLinked();
-      const provider = (await privyWallet.getEthereumProvider()) as {
+      const provider = (await signerWallet.getEthereumProvider()) as {
         request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
       };
       const result = await placeDinariOrder({
@@ -275,9 +274,9 @@ export default function StockDetailView({ symbol }: StockDetailViewProps) {
   const canTrade =
     !!stockId &&
     !!scaAddress &&
-    !!privyWallet &&
+    !!signerWallet &&
     isPimlicoConfigured() &&
-    isPrivyConfigured &&
+    isSignerConfigured &&
     !!entity?.canTransact &&
     numericAmount > 0 &&
     !isBusy;

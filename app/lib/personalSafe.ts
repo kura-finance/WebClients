@@ -19,6 +19,7 @@ import { base } from "viem/chains";
 import { toSafeSmartAccount } from "permissionless/accounts";
 import { env } from "@/config/env";
 import type { EthereumProvider } from "@/lib/smartAccountSend";
+import { signerCopy } from "@/lib/signer/copy";
 
 /** Personal Smart Wallet uses the default salt (0). Treasury uses 1. */
 export const PERSONAL_SAFE_SALT_NONCE = BigInt(0);
@@ -45,7 +46,7 @@ async function buildPersonalAccount(eip1193Provider: EthereumProvider) {
     method: "eth_accounts",
   })) as string[];
   const eoaAddress = accounts[0] as `0x${string}` | undefined;
-  if (!eoaAddress) throw new Error("No Privy wallet available. Sign in again and retry.");
+  if (!eoaAddress) throw new Error(signerCopy.noWallet);
 
   try {
     await eip1193Provider.request({

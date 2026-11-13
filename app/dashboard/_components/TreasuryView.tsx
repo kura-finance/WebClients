@@ -17,7 +17,6 @@ import {
   Sparkles,
   Vault,
 } from "lucide-react";
-import { useWallets } from "@privy-io/react-auth";
 import { useAppStore } from "@/store/useAppStore";
 import { useFinanceStore } from "@/store/useFinanceStore";
 import { useOrgStore } from "@/store/useOrgStore";
@@ -44,7 +43,10 @@ import {
   syncUpdateTreasury,
 } from "@/lib/treasurySync";
 import { treasuryErrorCode } from "@/lib/treasuryApi";
-import { isPimlicoConfigured, isPrivyConfigured } from "@/config/env";
+import { isPimlicoConfigured } from "@/config/env";
+import { features } from "@/config/features";
+import { isSignerConfigured, useSignerWallet } from "@/lib/signer";
+import { signerCopy } from "@/lib/signer/copy";
 import PrivyEoaSync from "@/components/wallet/PrivyEoaSync";
 import TreasurySwitcher from "@/components/wallet/TreasurySwitcher";
 import { Button } from "@/components/ui/button";
@@ -183,16 +185,7 @@ export default function TreasuryView() {
   const treasury = useTreasuryWallet();
   const pending = useTreasuryPendingTxs(treasury.scaAddress);
   const bankAccounts = useFinanceStore((s) => s.accounts);
-  const { wallets } = useWallets();
-
-  const privyWallet = useMemo(() => {
-    return (
-      wallets.find((w) => w.walletClientType === "privy") ??
-      wallets.find((w) => w.address?.toLowerCase() === personal.eoaAddress?.toLowerCase()) ??
-      wallets[0] ??
-      null
-    );
-  }, [wallets, personal.eoaAddress]);
+  const signerWallet = useSignerWallet(personal.eoaAddress);
 
   const { activities, loading: activityLoading, refresh: refreshActivity } = useWalletActivity(
     treasury.scaAddress,
@@ -261,8 +254,8 @@ export default function TreasuryView() {
   };
 
   const getProvider = async () => {
-    if (!privyWallet) throw new Error("Privy wallet unavailable. Sign in again.");
-    return (await privyWallet.getEthereumProvider()) as {
+    if (!signerWallet) throw new Error(signerCopy.walletUnavailable);
+    return (await signerWallet.getEthereumProvider()) as {
       request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
     };
   };
@@ -339,7 +332,7 @@ export default function TreasuryView() {
     if (!personal.eoaAddress) {
       setDiscoveredSafes([]);
       setSelectedSafes(new Set());
-      setDiscoverError("Connect Privy to discover Safes you own.");
+      setDiscoverError(`${signerCopy.connect} to discover Safes you own.`);
       return;
     }
     setDiscoverLoading(true);
@@ -359,7 +352,7 @@ export default function TreasuryView() {
       if (candidates.length === 0) {
         setDiscoverError(
           safes.length === 0
-            ? "No Safes found for your Privy EOA on Base."
+            ? `No Safes found for your ${signerCopy.eoa} on Base.`
             : "All Safes you own are already imported (Smart Wallet excluded).",
         );
       }
@@ -479,7 +472,7 @@ export default function TreasuryView() {
       isOpen={bindOpen}
       onClose={() => setBindOpen(false)}
       title="Import / bind Safe"
-      description="Safes on Base where your Privy EOA is already an owner. Your Smart Wallet is excluded."
+      description={`Safes on Base where your ${signerCopy.eoa} is already an owner. Your Smart Wallet is excluded.`}
     >
       <div className="space-y-4">
         <div className="flex items-center justify-between gap-2">
@@ -639,7 +632,7 @@ export default function TreasuryView() {
   if (treasuries.length === 0) {
     return (
       <>
-        {isPrivyConfigured ? (
+        {isSignerConfigured ? (
           <PrivyEoaSync
             onEoa={personal.applyEoaAddress}
             persistedEoa={personal.record.walletAddress}
@@ -649,7 +642,9 @@ export default function TreasuryView() {
         <EmptyGate
           eyebrow="Treasury"
           title="Treasury Safe"
-          description="Treasury is a multi-sig Safe for USDC — separate from your Smart Wallet (Home / Transfer). For bank ACH / Wire / FPS / SEPA, use an ops account with KYC."
+          description={`Treasury is a multi-sig Safe for USDC — separate from your Smart Wallet (Home / Transfer).${
+            features.fiatRamp ? " For bank ACH / Wire / FPS / SEPA, use an ops account with KYC." : ""
+          }`}
           action={
             <>
               {actionError ? <PageAlert variant="warning">{actionError}</PageAlert> : null}
@@ -664,7 +659,7 @@ export default function TreasuryView() {
                     Create Treasury Safe
                   </h2>
                   <p className="mt-1.5 text-xs leading-relaxed text-[var(--kura-text-secondary)]">
-                    Get a counterfactual Treasury address from your Privy EOA (salt ≠ Smart Wallet). No
+                    Get a counterfactual Treasury address from your {signerCopy.eoa} (salt ≠ Smart Wallet). No
                     on-chain deploy yet — fund with USDC on Base first.
                     {personal.scaAddress ? (
                       <> Smart Wallet: {truncate(personal.scaAddress)}.</>
@@ -677,7 +672,7 @@ export default function TreasuryView() {
                   ) : null}
                   <Button
                     className="mt-5 w-full rounded-full"
-                    disabled={busy !== null || !privyWallet}
+                    disabled={busy !== null || !signerWallet}
                     onClick={() => {
                       setCreateName(defaultTreasuryName([]));
                       setCreateOpen(true);
@@ -696,7 +691,7 @@ export default function TreasuryView() {
                     Import Safes you own
                   </h2>
                   <p className="mt-1.5 text-xs leading-relaxed text-[var(--kura-text-secondary)]">
-                    Scan Base for Safes where your Privy EOA is already an owner, or paste an address.
+                    Scan Base for Safes where your {signerCopy.eoa} is already an owner, or paste an address.
                   </p>
                   <Button
                     variant="outline"
@@ -710,13 +705,15 @@ export default function TreasuryView() {
                 </Panel>
               </div>
 
-              <p className="mt-6 text-center text-xs text-[var(--kura-text-secondary)]">
-                Personal / ops fiat stays on{" "}
-                <Link href="/dashboard" className="font-semibold text-[var(--kura-primary)] hover:underline">
-                  Home
-                </Link>{" "}
-                / Transfer with KYC — never mixed into this Treasury Safe.
-              </p>
+              {features.fiatRamp ? (
+                <p className="mt-6 text-center text-xs text-[var(--kura-text-secondary)]">
+                  Personal / ops fiat stays on{" "}
+                  <Link href="/dashboard" className="font-semibold text-[var(--kura-primary)] hover:underline">
+                    Home
+                  </Link>{" "}
+                  / Transfer with KYC — never mixed into this Treasury Safe.
+                </p>
+              ) : null}
 
               <Modal
                 isOpen={createOpen}
@@ -734,7 +731,7 @@ export default function TreasuryView() {
                     <Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>
                       Cancel
                     </Button>
-                    <Button type="submit" disabled={busy === "create" || !privyWallet}>
+                    <Button type="submit" disabled={busy === "create" || !signerWallet}>
                       {busy === "create" ? (
                         <Loader2 className="h-3.5 w-3.5 animate-spin" />
                       ) : (
@@ -756,7 +753,7 @@ export default function TreasuryView() {
   // ── Bound treasury dashboard ──
   return (
     <DashboardPage>
-      {isPrivyConfigured ? (
+      {isSignerConfigured ? (
         <PrivyEoaSync
           onEoa={personal.applyEoaAddress}
           persistedEoa={personal.record.walletAddress}
@@ -862,7 +859,7 @@ export default function TreasuryView() {
                 Fund this address before activating
               </p>
               <p className="mt-1 text-xs leading-relaxed text-[var(--kura-text-secondary)]">
-                Your Privy EOA still owns this Safe. The contract is not on-chain yet — send USDC on
+                Your {signerCopy.eoa} still owns this Safe. The contract is not on-chain yet — send USDC on
                 Base to the address below (counterfactual balances work). Keep ~0.05 USDC for gas,
                 then Activate.
               </p>
@@ -903,7 +900,7 @@ export default function TreasuryView() {
                 size="sm"
                 variant="outline"
                 className="rounded-full"
-                disabled={busy !== null || !canActivate || !privyWallet}
+                disabled={busy !== null || !canActivate || !signerWallet}
                 onClick={() => void handleActivate()}
               >
                 {busy === "activate" ? (
@@ -942,12 +939,14 @@ export default function TreasuryView() {
                 {formatUsd(stableCash, isBalanceHidden)}
               </span>
             </span>
-            <span>
-              Connected banks (TrackFi){" "}
-              <span className="font-semibold tabular-nums text-[var(--kura-text)]">
-                {formatUsd(bankCash, isBalanceHidden)}
+            {features.trackFi ? (
+              <span>
+                Connected banks (TrackFi){" "}
+                <span className="font-semibold tabular-nums text-[var(--kura-text)]">
+                  {formatUsd(bankCash, isBalanceHidden)}
+                </span>
               </span>
-            </span>
+            ) : null}
           </div>
         </Panel>
 
@@ -1201,7 +1200,7 @@ export default function TreasuryView() {
             <Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>
               Cancel
             </Button>
-            <Button type="submit" disabled={busy === "create" || !privyWallet}>
+            <Button type="submit" disabled={busy === "create" || !signerWallet}>
               {busy === "create" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Create address"}
             </Button>
           </div>

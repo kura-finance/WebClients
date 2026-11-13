@@ -25,6 +25,7 @@ import {
 } from "@/lib/smartAccountSend";
 import { isSafeOwner, isEthAddress, normalizeAddress } from "@/lib/safeOwners";
 import type { TreasurySource } from "@/lib/orgTreasury";
+import { signerCopy } from "@/lib/signer/copy";
 
 /** Default salt for the first created Treasury (personal Smart Wallet = 0). */
 export const TREASURY_SAFE_SALT_NONCE = BigInt(1);
@@ -70,7 +71,7 @@ async function buildTreasuryAccount(
     method: "eth_accounts",
   })) as string[];
   const eoaAddress = accounts[0] as `0x${string}` | undefined;
-  if (!eoaAddress) throw new Error("No Privy wallet available. Sign in again and retry.");
+  if (!eoaAddress) throw new Error(signerCopy.noWallet);
 
   try {
     await eip1193Provider.request({
@@ -164,7 +165,7 @@ export async function assertEoaIsOwner(
     throw new Error("Enter a valid Safe address (0x…).");
   }
   if (!eoaAddress || !isEthAddress(eoaAddress)) {
-    throw new Error("Connect Privy before binding a Treasury Safe.");
+    throw new Error(`${signerCopy.connect} before binding a Treasury Safe.`);
   }
 
   const info = await fetchSafeSigners(normalizeAddress(scaAddress));
@@ -173,7 +174,7 @@ export async function assertEoaIsOwner(
   }
   if (!isSafeOwner(info.owners, eoaAddress)) {
     throw new Error(
-      "Your Privy EOA is not an owner of this Safe. Add it as a signer first, or create a new Treasury Safe.",
+      `Your ${signerCopy.eoa} is not an owner of this Safe. Add it as a signer first, or create a new Treasury Safe.`,
     );
   }
   return info;
