@@ -31,7 +31,7 @@ function vaultAssetLogo(vault: MorphoVault): { src: string | null; color: string
     (t) => t.symbol.toLowerCase() === vault.assetSymbol.toLowerCase(),
   );
   return {
-    src: cryptoLogoUrl(vault.assetSymbol),
+    src: cryptoLogoUrl(vault.assetSymbol) ?? vault.assetLogoUrl ?? null,
     color: token?.color ?? "#6366F1",
   };
 }

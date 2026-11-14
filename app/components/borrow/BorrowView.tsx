@@ -37,7 +37,7 @@ function marketLogo(market: MorphoMarket): { src: string | null; color: string }
     (t) => t.symbol.toLowerCase() === symbol.toLowerCase(),
   );
   return {
-    src: cryptoLogoUrl(symbol),
+    src: cryptoLogoUrl(symbol) ?? market.collateralAsset.logoURI ?? null,
     color: token?.color ?? "#6366F1",
   };
 }

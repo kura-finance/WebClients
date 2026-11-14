@@ -73,3 +73,9 @@
       `settings/` 整個刪除；`marketing/` 只留下載頁還在用的 `MarketingNav`、`MarketingFooter`
 - [x] 備援 Base RPC 在瀏覽器裡都不能用（2026-11-13）：`base.llamarpc.com` 回 525，`1rpc.io/base` 回「usage limit」且被 CORS 擋
       `app/lib/baseChain.ts` 與 `proxy.ts` 改成 `base-rpc.publicnode.com`、`base.drpc.org`，`mainnet.base.org` 墊後；換完後瀏覽器裡沒有 RPC 的 CORS 錯誤。公用端點隨時可能變動，正式部署還是建議設 Alchemy key
+- [x] 沒有 logo.dev 金鑰時代幣圖示全部變成兩個字母：圖示只有 logo.dev 一個來源，而社群版預設沒有金鑰
+      新增 `app/lib/tokenLogos.ts`（與 mobile-app 的 `src/config/tokenLogos.ts` 是同一份檔案，改一邊要同步另一邊）：代幣對應 CoinGecko 公開圖片 CDN 的固定網址，免金鑰，細節見 mobile-app 的 TODO.md。清單以外的 Morpho 資產改用 Morpho API 自己回傳的 `logoURI`。有設金鑰時行為不變。已在瀏覽器驗過：首頁、Markets、Earn、Borrow 的圖示全部載入，沒有破圖。股票圖示仍需要金鑰（股票本來就要後端）
+- [x] Kura 標誌在深色主題下看不見：`logo.webp` 是黑色線條配透明背景，側邊欄、歡迎頁、下載頁都直接疊在深色底上
+      8 處都加上 `dark:invert`；已在瀏覽器驗過深色主題下看得到。淺色主題不受影響
+- [x] `favicon.ico`、主畫面圖示都是 404：`app/layout.tsx` 與 `public/manifest.json` 指向 `/favicon.ico`、`/ios/AppIcon.appiconset/…`、`/android/mipmap-…`，這些檔案不在公開的 repo 裡
+      用 repo 自己的 `public/favicon.svg` 產生 `favicon.ico`（32px）、`apple-touch-icon.png`（180px）、`icon-192.png`、`icon-512.png`、`icon-maskable-512.png`（白底），並把兩處引用改過去；manifest 的截圖改指向既有的 `screenshot.webp`。已驗過所有引用都回 200。**白底與留白是我選的**，要換成正式的圖示直接覆蓋同名檔案即可；**沒有在實機上做「加入主畫面」**

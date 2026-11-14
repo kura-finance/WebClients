@@ -22,60 +22,33 @@
       "purpose": "any"
     },
     {
-      "src": "/android/mipmap-mdpi/ic_launcher.png",
-      "sizes": "48x48",
-      "type": "image/png",
-      "purpose": "any"
-    },
-    {
-      "src": "/android/mipmap-hdpi/ic_launcher.png",
-      "sizes": "72x72",
-      "type": "image/png",
-      "purpose": "any"
-    },
-    {
-      "src": "/android/mipmap-xhdpi/ic_launcher.png",
-      "sizes": "96x96",
-      "type": "image/png",
-      "purpose": "any"
-    },
-    {
-      "src": "/android/mipmap-xxhdpi/ic_launcher.png",
-      "sizes": "144x144",
-      "type": "image/png",
-      "purpose": "any"
-    },
-    {
-      "src": "/android/mipmap-xxxhdpi/ic_launcher.png",
+      "src": "/icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/ios/AppIcon.appiconset/icon-1024.png",
-      "sizes": "1024x1024",
+      "src": "/icon-512.png",
+      "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/android/playstore-icon.png",
+      "src": "/icon-maskable-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
     }
   ],
-  "categories": ["finance", "productivity"],
+  "categories": [
+    "finance",
+    "productivity"
+  ],
   "screenshots": [
     {
-      "src": "/ios/AppIcon.appiconset/icon-1024.png",
-      "sizes": "1024x1024",
-      "type": "image/png",
-      "form_factor": "wide"
-    },
-    {
-      "src": "/android/mipmap-xxxhdpi/ic_launcher.png",
-      "sizes": "192x192",
-      "type": "image/png",
+      "src": "/screenshot.webp",
+      "sizes": "1206x2622",
+      "type": "image/webp",
       "form_factor": "narrow"
     }
   ]

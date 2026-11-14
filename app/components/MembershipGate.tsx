@@ -29,7 +29,7 @@ export default function MembershipGate() {
     <div className="flex min-h-screen w-full flex-col bg-[var(--kura-bg)] px-6 py-6 text-[var(--kura-text)] md:px-8">
       <header className="flex w-full items-center justify-between">
         <div className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full">
-          <Image src={logoIcon} alt="Kura icon" width={28} height={28} className="object-cover" />
+          <Image src={logoIcon} alt="Kura icon" width={28} height={28} className="object-cover dark:invert" />
         </div>
         <Button type="button" variant="ghost" onClick={() => void logout()} className="text-sm">
           Sign out

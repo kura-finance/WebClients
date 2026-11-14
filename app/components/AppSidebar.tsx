@@ -122,7 +122,7 @@ export default function AppSidebar() {
   return (
     <nav className="relative z-10 w-56 border-r border-[var(--kura-border)] bg-[var(--kura-bg)] py-5 px-3 flex flex-col gap-1 shrink-0 h-full overflow-y-auto hide-scrollbar">
       <Link href="/dashboard" className="flex items-center gap-2.5 px-2 mb-3">
-        <Image src="/logo.webp" alt="Kura" width={24} height={24} className="rounded-md" />
+        <Image src="/logo.webp" alt="Kura" width={24} height={24} className="rounded-md dark:invert" />
         <span className="text-sm font-semibold tracking-tight text-[var(--kura-text)]">Kura</span>
       </Link>
 

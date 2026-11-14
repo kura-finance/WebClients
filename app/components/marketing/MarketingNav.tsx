@@ -11,7 +11,7 @@ export default function MarketingNav() {
     <header className="sticky top-0 z-50 border-b border-[var(--kura-border)]/80 bg-[var(--kura-bg)]/85 backdrop-blur-md">
       <div className="marketing-container flex h-16 items-center justify-between gap-4">
         <Link href="/" className="flex items-center gap-2.5 shrink-0">
-          <Image src="/logo.webp" alt="Kura" width={28} height={28} className="rounded-md" />
+          <Image src="/logo.webp" alt="Kura" width={28} height={28} className="rounded-md dark:invert" />
           <span className="text-[15px] font-semibold tracking-tight text-[var(--kura-text)]">
             Kura
           </span>

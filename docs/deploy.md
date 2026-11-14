@@ -82,7 +82,7 @@ Publishable keys are visible to every user of that build. Treat leaks as rotatio
 | Variable | Purpose |
 |----------|---------|
 | `NEXT_PUBLIC_API_URL` | CSP `connect-src` API origin (defaults to `https://api.kura-finance.com`) |
-| `NEXT_PUBLIC_LOGODEV_TOKEN` | Ticker icons |
+| `NEXT_PUBLIC_LOGODEV_TOKEN` | Stock icons (token icons work without it) |
 | `NEXT_PUBLIC_STRIPE_PRICE_*` | Plan price IDs shown in billing UI |
 
 Backend-only secrets (Plaid, Stripe secret keys, DB, JWT) never belong in this repo.
@@ -143,7 +143,7 @@ The deploy workflow **does not run on forks**. It only runs when `github.reposit
 | `NEXT_PUBLIC_REOWN_PROJECT_ID` | Reown |
 | `NEXT_PUBLIC_ALCHEMY_API_KEY` | Base RPC |
 | `NEXT_PUBLIC_BASE_RPC_URL` | Optional explicit RPC URL |
-| `NEXT_PUBLIC_LOGODEV_TOKEN` | Optional icons |
+| `NEXT_PUBLIC_LOGODEV_TOKEN` | Optional stock icons |
 | `NEXT_PUBLIC_PIMLICO_API_KEY` | Smart Wallet |
 | `NEXT_PUBLIC_PAY_GAS_IN_USDC` | Optional |
 | `NEXT_PUBLIC_LIFI_API_KEY` | Optional |

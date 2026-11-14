@@ -90,7 +90,7 @@ export default function RootHubPage() {
       <div className="min-h-screen w-full bg-[var(--kura-bg)] text-[var(--kura-text)] px-6 py-6 md:px-8 flex flex-col">
         <header className="w-full flex items-center justify-between">
           <div className="w-8 h-8 rounded-full overflow-hidden flex items-center justify-center">
-            <Image src={logoIcon} alt="Kura icon" width={28} height={28} className="object-cover" />
+            <Image src={logoIcon} alt="Kura icon" width={28} height={28} className="object-cover dark:invert" />
           </div>
           <a
             href="https://kura-finance.com"

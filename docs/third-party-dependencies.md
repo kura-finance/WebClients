@@ -24,7 +24,8 @@
 | **TradingView** | Market / stock charts | None (widget) | Charts empty; CSP must allow |
 | **Plaid** | Bank link | **Backend only** | TrackFi banks |
 | **Stripe** | Subscriptions | Price IDs in web; secrets on API | Billing UI |
-| **CoinGecko / logo.dev** | Prices / icons | Optional | Cosmetic / pricing display |
+| **CoinGecko** | Prices; token icons (image CDN, no key) | Yes | Pricing display; icons fall back to initials |
+| **logo.dev** | Stock icons; replaces the CoinGecko token icons when a key is set | Optional | Cosmetic |
 
 ## Li.Fi fee
 
