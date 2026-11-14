@@ -44,7 +44,7 @@ import {
 } from "@/lib/safeTxService";
 import { isSignerConfigured, useSignerWallet } from "@/lib/signer";
 import { signerCopy } from "@/lib/signer/copy";
-import PrivyEoaSync from "@/components/wallet/PrivyEoaSync";
+import SignerEoaSync from "@/components/wallet/SignerEoaSync";
 import TreasurySwitcher from "@/components/wallet/TreasurySwitcher";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -359,7 +359,7 @@ export default function OrgApprovalsView() {
     return (
       <>
         {isSignerConfigured ? (
-          <PrivyEoaSync onEoa={personal.applyEoaAddress} persistedEoa={personal.record.walletAddress} />
+          <SignerEoaSync onEoa={personal.applyEoaAddress} persistedEoa={personal.record.walletAddress} />
         ) : null}
         <EmptyGate
           eyebrow="Approvals"
@@ -378,7 +378,7 @@ export default function OrgApprovalsView() {
   return (
     <DashboardPage>
       {isSignerConfigured ? (
-        <PrivyEoaSync onEoa={personal.applyEoaAddress} persistedEoa={personal.record.walletAddress} />
+        <SignerEoaSync onEoa={personal.applyEoaAddress} persistedEoa={personal.record.walletAddress} />
       ) : null}
 
       <PageHeader

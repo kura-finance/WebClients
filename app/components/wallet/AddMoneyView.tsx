@@ -16,7 +16,7 @@ import { useAppStore } from "@/store/useAppStore";
 import { paysGasInUsdc } from "@/config/env";
 import { features } from "@/config/features";
 import { isSignerConfigured } from "@/lib/signer";
-import PrivyEoaSync from "@/components/wallet/PrivyEoaSync";
+import SignerEoaSync from "@/components/wallet/SignerEoaSync";
 import BridgeVerifyGate from "@/components/wallet/BridgeVerifyGate";
 import { Button } from "@/components/ui/button";
 import { QrCode } from "@/components/ui/QrCode";
@@ -86,7 +86,7 @@ export default function AddMoneyView() {
   return (
     <DashboardPage variant="wizard">
       {isSignerConfigured ? (
-        <PrivyEoaSync onEoa={wallet.applyEoaAddress} persistedEoa={wallet.record.walletAddress} />
+        <SignerEoaSync onEoa={wallet.applyEoaAddress} persistedEoa={wallet.record.walletAddress} />
       ) : null}
 
       {features.fiatRamp && step !== "method" ? (

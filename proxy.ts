@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { env, hasBackendUrl } from './app/config/env';
+import { env } from './app/config/env';
+import { features } from './app/config/features';
 
 function resolvePublicOrigin(request: NextRequest): string {
   const forwardedHost = request.headers.get('x-forwarded-host')?.split(',')[0]?.trim();
@@ -34,7 +35,7 @@ export function proxy(request: NextRequest) {
 
   // Community edition (no backend): no Privy, Plaid, Reown or Kura API, so their
   // hosts stay out of the policy. They are only allowed in backend mode.
-  const backend = hasBackendUrl();
+  const backend = features.backend;
   const backendOrigin = (() => {
     try {
       return backend ? new URL(env.backendUrl).origin : '';

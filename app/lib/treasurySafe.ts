@@ -99,7 +99,7 @@ async function buildTreasuryAccount(
   return { account, eoaAddress, publicClient, saltNonce };
 }
 
-/** Counterfactual Treasury Safe address for the current Privy EOA + salt. */
+/** Counterfactual Treasury Safe address for the current signer EOA + salt. */
 export async function computeTreasurySafeAddress(
   eip1193Provider: EthereumProvider,
   saltNonce: bigint = TREASURY_SAFE_SALT_NONCE,
@@ -156,7 +156,7 @@ export async function isTreasurySafeDeployed(address: `0x${string}`): Promise<bo
   return Boolean(code && code !== "0x");
 }
 
-/** Verify Privy EOA is an on-chain owner of the given Safe (for bind flow). */
+/** Verify the signer EOA is an on-chain owner of the given Safe (for bind flow). */
 export async function assertEoaIsOwner(
   scaAddress: string,
   eoaAddress: string | null | undefined,

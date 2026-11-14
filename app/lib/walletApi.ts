@@ -6,7 +6,7 @@
  *   PUT  /api/wallet/eoa    → { walletAddress }
  *
  * Without a backend there is no wallet record: reads return an empty record and
- * saves are no-ops. Addresses then come from Privy (EOA) and local derivation
+ * saves are no-ops. Addresses then come from the signer (EOA) and local derivation
  * (personal Safe — see lib/personalSafe.ts) via useWalletSessionStore.
  */
 
@@ -17,7 +17,7 @@ import { features } from "@/config/features";
 const apiName = "WalletApi";
 
 export interface WalletRecord {
-  /** Privy embedded EOA address */
+  /** Signer EOA address (Privy embedded wallet, or the browser wallet) */
   walletAddress: string | null;
   /** Smart Wallet (ERC-4337 Safe SCA) address on Base */
   scaAddress: string | null;

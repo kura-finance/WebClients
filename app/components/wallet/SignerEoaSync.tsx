@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react";
 import { saveEoaAddress } from "@/lib/walletApi";
 import { isSignerConfigured, useSignerWallet } from "@/lib/signer";
 
-interface PrivyEoaSyncProps {
+interface SignerEoaSyncProps {
   onEoa: (address: string) => void;
   persistedEoa: string | null;
 }
@@ -13,7 +13,7 @@ interface PrivyEoaSyncProps {
  * Discovers the signer EOA (Privy embedded wallet, or the browser wallet when
  * there is no backend) and persists it via /api/wallet/eoa in backend mode.
  */
-export default function PrivyEoaSync({ onEoa, persistedEoa }: PrivyEoaSyncProps) {
+export default function SignerEoaSync({ onEoa, persistedEoa }: SignerEoaSyncProps) {
   const signerWallet = useSignerWallet();
   const savedRef = useRef<string | null>(null);
 

@@ -29,7 +29,7 @@ import {
 } from "@/lib/smartAccountSend";
 import { isSignerConfigured, useSignerWallet } from "@/lib/signer";
 import { signerCopy } from "@/lib/signer/copy";
-import PrivyEoaSync from "@/components/wallet/PrivyEoaSync";
+import SignerEoaSync from "@/components/wallet/SignerEoaSync";
 import TradingAccountPicker, {
   useTradingAccount,
 } from "@/components/wallet/TradingAccountPicker";
@@ -280,7 +280,7 @@ export default function StockDetailView({ symbol }: StockDetailViewProps) {
 
   return (
     <DashboardPage className="!max-w-none px-4 pb-10 pt-4 sm:px-5 lg:px-6">
-      <PrivyEoaSync onEoa={applyEoaAddress} persistedEoa={record.walletAddress} />
+      <SignerEoaSync onEoa={applyEoaAddress} persistedEoa={record.walletAddress} />
       <Link
         href="/dashboard/rwa"
         className="mb-3 inline-flex items-center gap-1.5 text-sm font-medium text-[var(--kura-text-secondary)] hover:text-[var(--kura-text)]"

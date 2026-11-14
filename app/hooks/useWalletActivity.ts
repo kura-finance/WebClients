@@ -11,7 +11,7 @@ import {
   type PayoutDrainResult,
   type TransferResult,
 } from "@/lib/bridgeRampApi";
-import { hasBackendUrl } from "@/config/env";
+import { features } from "@/config/features";
 import { getAddress } from "viem";
 import { getBaseRpcUrls, HOME_STABLECOINS } from "@/lib/baseChain";
 import { PORTFOLIO_TOKENS } from "@/lib/portfolioTokens";
@@ -263,7 +263,7 @@ function drainToActivity(drain: PayoutDrainResult): WalletActivity {
 }
 
 async function fetchBridgeActivities(): Promise<WalletActivity[]> {
-  if (!hasBackendUrl()) return [];
+  if (!features.fiatRamp) return [];
   const rows: WalletActivity[] = [];
   try {
     const deposits = await listDeposits();
@@ -400,7 +400,7 @@ export function useWalletActivity(smartAddress: string | null) {
       return mergeActivities(bridge, chain);
     },
     errorMessage: "Failed to load activity",
-    enabled: Boolean(smartAddress) || hasBackendUrl(),
+    enabled: Boolean(smartAddress) || features.fiatRamp,
     refreshMs: 45_000,
   });
 
@@ -514,7 +514,7 @@ async function loadInitialHistory(smartAddress: string | null): Promise<HistoryL
  * Initial load keeps fetching months until ≥ HISTORY_MIN_INITIAL rows (or exhausted = load all).
  */
 export function useWalletActivityHistory(smartAddress: string | null) {
-  const enabled = Boolean(smartAddress) || hasBackendUrl();
+  const enabled = Boolean(smartAddress) || features.fiatRamp;
 
   const initial = useLoad({
     key: ["wallet", "activity-history", smartAddress?.toLowerCase() ?? null],

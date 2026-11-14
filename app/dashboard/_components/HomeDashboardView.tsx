@@ -20,7 +20,7 @@ import { cryptoLogoUrl } from "@/lib/assetLogos";
 import { features } from "@/config/features";
 import { isSignerConfigured } from "@/lib/signer";
 import { signerCopy } from "@/lib/signer/copy";
-import PrivyEoaSync from "@/components/wallet/PrivyEoaSync";
+import SignerEoaSync from "@/components/wallet/SignerEoaSync";
 import HomeStableSwapPanel from "@/components/wallet/HomeStableSwapPanel";
 import WalletHistorySection from "@/components/wallet/WalletHistorySection";
 import AssetIcon from "@/components/ui/AssetIcon";
@@ -95,7 +95,7 @@ export default function HomeDashboardView() {
   return (
     <DashboardPage>
       {isSignerConfigured ? (
-        <PrivyEoaSync onEoa={wallet.applyEoaAddress} persistedEoa={wallet.record.walletAddress} />
+        <SignerEoaSync onEoa={wallet.applyEoaAddress} persistedEoa={wallet.record.walletAddress} />
       ) : null}
 
       <PageHeader

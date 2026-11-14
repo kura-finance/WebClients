@@ -79,3 +79,5 @@
       8 處都加上 `dark:invert`；已在瀏覽器驗過深色主題下看得到。淺色主題不受影響
 - [x] `favicon.ico`、主畫面圖示都是 404：`app/layout.tsx` 與 `public/manifest.json` 指向 `/favicon.ico`、`/ios/AppIcon.appiconset/…`、`/android/mipmap-…`，這些檔案不在公開的 repo 裡
       用 repo 自己的 `public/favicon.svg` 產生 `favicon.ico`（32px）、`apple-touch-icon.png`（180px）、`icon-192.png`、`icon-512.png`、`icon-maskable-512.png`（白底），並把兩處引用改過去；manifest 的截圖改指向既有的 `screenshot.webp`。已驗過所有引用都回 200。**白底與留白是我選的**，要換成正式的圖示直接覆蓋同名檔案即可；**沒有在實機上做「加入主畫面」**
+- [x] 「有沒有後端」有兩種問法並存：`features.*` 與直接呼叫 `hasBackendUrl()`（4 個檔案 10 處，加上 `proxy.ts`）
+      全部改成 `app/config/features.ts` 的旗標（候補名單用 `card`、股票用 `stocks`、銀行出入金紀錄用 `fiatRamp`）。兩種模式共用卻叫 Privy 的元件改名：`PrivySafeSetup` → `PersonalSafeSetup`、`PrivyEoaSync` → `SignerEoaSync`，相關註解改成「signer」。行為不變；有後端與無後端的 build 都通過。`next.config.ts` 仍自己讀環境變數（打包設定，不經過 app 的模組）

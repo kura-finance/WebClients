@@ -14,7 +14,7 @@ export interface OrgMember {
   role: OrgRole;
   status: MemberStatus;
   invitedAt: string;
-  /** Privy / EOA address used as Safe owner when canSign. */
+  /** Signer EOA address used as Safe owner when canSign. */
   walletAddress?: string;
   /**
    * Desired signing privilege. On-chain Safe owners are the source of truth;

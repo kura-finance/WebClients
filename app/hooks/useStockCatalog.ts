@@ -7,7 +7,7 @@ import {
   type StockQuoteRow,
 } from "@/lib/stockCatalog";
 import { stockLogoUrl } from "@/lib/assetLogos";
-import { hasBackendUrl } from "@/config/env";
+import { features } from "@/config/features";
 import { requestJson } from "@/lib/httpClient";
 import { useLoad } from "@/hooks/useLoad";
 
@@ -18,7 +18,7 @@ interface DinariStock {
 }
 
 async function tryFetchDinariCatalog(): Promise<DinariStock[] | null> {
-  if (!hasBackendUrl()) return null;
+  if (!features.stocks) return null;
   try {
     return await requestJson<DinariStock[]>(
       "/api/dinari/stocks?page=1&pageSize=50",

@@ -33,7 +33,7 @@ export const features = {
   /** Backend-stored profile: edit display name, delete account. */
   accountProfile: backend,
 
-  // On-chain features — always on (Privy + Base RPC / public APIs only).
+  // On-chain features — always on (Base RPC / public APIs only).
   wallet: true,
   earn: true,
   borrow: true,

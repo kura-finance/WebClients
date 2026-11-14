@@ -18,7 +18,7 @@ import {
 } from "@/lib/personalSafe";
 import { saveEoaAddress, saveScaAddress } from "@/lib/walletApi";
 
-interface PrivySafeSetupProps {
+interface PersonalSafeSetupProps {
   /** Existing SCA from GET /api/wallet (or session). Skip compute when set. */
   persistedSca: string | null;
   onSca: (address: string) => void;
@@ -30,7 +30,7 @@ const RETRY_DELAYS_MS = [1_500, 4_000, 10_000, 30_000];
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
-export default function PrivySafeSetup({ persistedSca, onSca, onError }: PrivySafeSetupProps) {
+export default function PersonalSafeSetup({ persistedSca, onSca, onError }: PersonalSafeSetupProps) {
   const signerWallet = useSignerWallet();
   const busyRef = useRef(false);
   const doneRef = useRef<string | null>(null);
@@ -65,7 +65,7 @@ export default function PrivySafeSetup({ persistedSca, onSca, onError }: PrivySa
         };
         const accounts = (await provider.request({ method: "eth_accounts" })) as string[];
         const eoa = accounts[0];
-        if (!eoa) throw new Error("Privy wallet has no account.");
+        if (!eoa) throw new Error("Signer wallet has no account.");
 
         // Without a backend nothing remembers the address between visits: show
         // the one derived last time now, then confirm it below.
@@ -83,7 +83,7 @@ export default function PrivySafeSetup({ persistedSca, onSca, onError }: PrivySa
             if (!mountedRef.current) return;
             if (attempt === 0) {
               const msg = e instanceof Error ? e.message : "Failed to set up Smart Wallet.";
-              console.warn("[PrivySafeSetup] Retrying:", msg);
+              console.warn("[PersonalSafeSetup] Retrying:", msg);
               onError?.(msg);
             }
             await sleep(RETRY_DELAYS_MS[Math.min(attempt, RETRY_DELAYS_MS.length - 1)]!);
@@ -96,11 +96,11 @@ export default function PrivySafeSetup({ persistedSca, onSca, onError }: PrivySa
 
         await Promise.all([
           saveScaAddress(sca).catch((err) => {
-            console.warn("[PrivySafeSetup] Failed to save SCA", err);
+            console.warn("[PersonalSafeSetup] Failed to save SCA", err);
             throw err;
           }),
           saveEoaAddress(eoa).catch((err) => {
-            console.warn("[PrivySafeSetup] Failed to save EOA", err);
+            console.warn("[PersonalSafeSetup] Failed to save EOA", err);
           }),
         ]);
 
@@ -109,7 +109,7 @@ export default function PrivySafeSetup({ persistedSca, onSca, onError }: PrivySa
       } catch (e) {
         doneRef.current = null;
         const msg = e instanceof Error ? e.message : "Failed to set up Smart Wallet.";
-        console.error("[PrivySafeSetup]", msg);
+        console.error("[PersonalSafeSetup]", msg);
         onError?.(msg);
       } finally {
         busyRef.current = false;

@@ -76,7 +76,7 @@ async function buildPersonalAccount(eip1193Provider: EthereumProvider) {
   return { account, eoaAddress, publicClient };
 }
 
-/** Counterfactual Smart Wallet address for the current Privy EOA. */
+/** Counterfactual Smart Wallet address for the current signer EOA. */
 export async function computePersonalSafeAddress(
   eip1193Provider: EthereumProvider,
 ): Promise<`0x${string}`> {

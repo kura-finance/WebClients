@@ -18,7 +18,7 @@ import { paysGasInUsdc } from "@/config/env";
 import { features } from "@/config/features";
 import { isSignerConfigured, useSignerWallet, type SignerWallet } from "@/lib/signer";
 import { signerCopy } from "@/lib/signer/copy";
-import PrivyEoaSync from "@/components/wallet/PrivyEoaSync";
+import SignerEoaSync from "@/components/wallet/SignerEoaSync";
 import BridgeVerifyGate from "@/components/wallet/BridgeVerifyGate";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -90,7 +90,7 @@ export default function MakePaymentView() {
   return (
     <DashboardPage variant="wizard">
       {isSignerConfigured ? (
-        <PrivyEoaSync onEoa={wallet.applyEoaAddress} persistedEoa={wallet.record.walletAddress} />
+        <SignerEoaSync onEoa={wallet.applyEoaAddress} persistedEoa={wallet.record.walletAddress} />
       ) : null}
 
       {features.fiatRamp && step !== "method" ? (

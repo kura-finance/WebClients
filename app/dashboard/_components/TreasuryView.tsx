@@ -47,7 +47,7 @@ import { paysGasInUsdc } from "@/config/env";
 import { features } from "@/config/features";
 import { isSignerConfigured, useSignerWallet } from "@/lib/signer";
 import { signerCopy } from "@/lib/signer/copy";
-import PrivyEoaSync from "@/components/wallet/PrivyEoaSync";
+import SignerEoaSync from "@/components/wallet/SignerEoaSync";
 import TreasurySwitcher from "@/components/wallet/TreasurySwitcher";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -627,7 +627,7 @@ export default function TreasuryView() {
     return (
       <>
         {isSignerConfigured ? (
-          <PrivyEoaSync
+          <SignerEoaSync
             onEoa={personal.applyEoaAddress}
             persistedEoa={personal.record.walletAddress}
           />
@@ -748,7 +748,7 @@ export default function TreasuryView() {
   return (
     <DashboardPage>
       {isSignerConfigured ? (
-        <PrivyEoaSync
+        <SignerEoaSync
           onEoa={personal.applyEoaAddress}
           persistedEoa={personal.record.walletAddress}
         />

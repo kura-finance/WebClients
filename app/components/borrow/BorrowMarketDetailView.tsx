@@ -35,7 +35,7 @@ import { useLoad } from "@/hooks/useLoad";
 import { PORTFOLIO_TOKENS } from "@/lib/portfolioTokens";
 import { cryptoLogoUrl } from "@/lib/assetLogos";
 import { isSignerConfigured, useSignerWallet } from "@/lib/signer";
-import PrivyEoaSync from "@/components/wallet/PrivyEoaSync";
+import SignerEoaSync from "@/components/wallet/SignerEoaSync";
 import TradingAccountPicker, {
   useTradingAccount,
 } from "@/components/wallet/TradingAccountPicker";
@@ -272,7 +272,7 @@ export default function BorrowMarketDetailView({ marketId }: { marketId: string 
   return (
     <DashboardPage>
       {isSignerConfigured ? (
-        <PrivyEoaSync
+        <SignerEoaSync
           onEoa={personal.applyEoaAddress}
           persistedEoa={personal.record.walletAddress}
         />

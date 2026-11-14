@@ -3,7 +3,7 @@
 import { useCallback, useState } from "react";
 import { useLoad } from "@/hooks/useLoad";
 import { useAppStore } from "@/store/useAppStore";
-import { hasBackendUrl } from "@/config/env";
+import { features } from "@/config/features";
 import {
   getWaitlistStatus,
   joinWaitlist,
@@ -39,7 +39,7 @@ export function useWaitlistJoin(product: WaitlistProduct, enabled = true) {
   // Set by a successful join() so the UI flips without waiting for a reload.
   const [joinedKey, setJoinedKey] = useState<string | null>(null);
 
-  const active = enabled && hasBackendUrl() && hasRealEmail;
+  const active = enabled && features.card && hasRealEmail;
   const statusKey = active ? cacheKey(email, product) : null;
 
   const status = useLoad({
@@ -60,7 +60,7 @@ export function useWaitlistJoin(product: WaitlistProduct, enabled = true) {
   const checking = active && status.loading;
 
   const join = useCallback(async () => {
-    if (!hasBackendUrl()) throw new Error("WAITLIST_UNAVAILABLE");
+    if (!features.card) throw new Error("WAITLIST_UNAVAILABLE");
     if (!hasRealEmail) throw new Error("EMAIL_REQUIRED");
 
     setSubmitting(true);
@@ -85,6 +85,6 @@ export function useWaitlistJoin(product: WaitlistProduct, enabled = true) {
     checking,
     submitting,
     hasRealEmail,
-    backendAvailable: hasBackendUrl(),
+    backendAvailable: features.card,
   };
 }

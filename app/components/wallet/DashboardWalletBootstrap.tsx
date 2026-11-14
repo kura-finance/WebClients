@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Dashboard-wide Privy wallet bootstrap (EOA + personal Smart Wallet SCA).
+ * Dashboard-wide wallet bootstrap (signer EOA + personal Smart Wallet SCA).
  * Mirrors mobile card wallet provision so web-first signups get a Smart Wallet address.
  * Also hydrates Treasury workspace from /api/treasuries (migrates localStorage once).
  */
@@ -14,8 +14,8 @@ import {
 } from "@/lib/treasurySync";
 import { useWalletSessionStore } from "@/store/useWalletSessionStore";
 import { isSignerConfigured } from "@/lib/signer";
-import PrivyEoaSync from "@/components/wallet/PrivyEoaSync";
-import PrivySafeSetup from "@/components/wallet/PrivySafeSetup";
+import SignerEoaSync from "@/components/wallet/SignerEoaSync";
+import PersonalSafeSetup from "@/components/wallet/PersonalSafeSetup";
 
 export default function DashboardWalletBootstrap() {
   const setEoaOverride = useWalletSessionStore((s) => s.setEoaOverride);
@@ -64,8 +64,8 @@ export default function DashboardWalletBootstrap() {
 
   return (
     <>
-      <PrivyEoaSync onEoa={onEoa} persistedEoa={persistedEoa} />
-      <PrivySafeSetup persistedSca={persistedSca} onSca={onSca} />
+      <SignerEoaSync onEoa={onEoa} persistedEoa={persistedEoa} />
+      <PersonalSafeSetup persistedSca={persistedSca} onSca={onSca} />
     </>
   );
 }

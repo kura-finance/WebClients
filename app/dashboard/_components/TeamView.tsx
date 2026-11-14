@@ -35,7 +35,7 @@ import {
 import { executeCallsFromSafe } from "@/lib/smartAccountSend";
 import { isSignerConfigured, useSignerWallet } from "@/lib/signer";
 import { signerCopy } from "@/lib/signer/copy";
-import PrivyEoaSync from "@/components/wallet/PrivyEoaSync";
+import SignerEoaSync from "@/components/wallet/SignerEoaSync";
 import TreasurySwitcher from "@/components/wallet/TreasurySwitcher";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -327,7 +327,7 @@ export default function TeamView() {
     return (
       <>
         {isSignerConfigured ? (
-          <PrivyEoaSync onEoa={personal.applyEoaAddress} persistedEoa={personal.record.walletAddress} />
+          <SignerEoaSync onEoa={personal.applyEoaAddress} persistedEoa={personal.record.walletAddress} />
         ) : null}
         <EmptyGate
           eyebrow="Team"
@@ -346,7 +346,7 @@ export default function TeamView() {
   return (
     <DashboardPage>
       {isSignerConfigured ? (
-        <PrivyEoaSync onEoa={personal.applyEoaAddress} persistedEoa={personal.record.walletAddress} />
+        <SignerEoaSync onEoa={personal.applyEoaAddress} persistedEoa={personal.record.walletAddress} />
       ) : null}
 
       <PageHeader
