@@ -73,8 +73,8 @@ Publishable keys are visible to every user of that build. Treat leaks as rotatio
 | `NEXT_PUBLIC_PIMLICO_API_KEY` | Smart Wallet UserOps (Transfer, Earn, Borrow, Markets) |
 | `NEXT_PUBLIC_ALCHEMY_API_KEY` or `NEXT_PUBLIC_BASE_RPC_URL` | Base RPC (public `mainnet.base.org` rate-limits) |
 | `NEXT_PUBLIC_PAY_GAS_IN_USDC` | Pay UserOp gas in USDC (`true` by default) |
-| `NEXT_PUBLIC_LIFI_INTEGRATOR` | Li.Fi integrator id |
-| `NEXT_PUBLIC_LIFI_FEE` | Integrator fee as a **fraction of 1** (hosted prod uses `0.25`) |
+| `NEXT_PUBLIC_LIFI_INTEGRATOR` | Li.Fi integrator id. Optional — hosted prod sets none |
+| `NEXT_PUBLIC_LIFI_FEE` | Integrator fee as a **fraction** of the swapped amount (`0.0025` = 0.25%). Optional — hosted prod takes no fee |
 | `NEXT_PUBLIC_LIFI_API_KEY` | Optional |
 
 ### Optional UI / billing
@@ -151,7 +151,7 @@ The deploy workflow **does not run on forks**. It only runs when `github.reposit
 
 `GCP_REGION` is a GitHub **Variable** (default `us-central1`). Moving the service to another GCP project only needs `GCP_PROJECT_ID`, `GCP_REGION` and `GCP_SERVICE_ACCOUNT_KEY` updated — the backup/rebuild scripts live in `BackendServer/infra/gcp-migration/`.
 
-Hosted production also pins Li.Fi integrator `kura` and fee `0.25` in the workflow. Override those build-args if you are not Kura.
+Hosted production sets no Li.Fi integrator and takes no integrator fee.
 
 PR / push **CI** (lint + typecheck) lives in [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) and does not deploy.
 
