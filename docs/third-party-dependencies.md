@@ -15,7 +15,7 @@
 |--------|------|----------------|----------------|
 | **Privy** (backend mode only) | Login + embedded EOA | App ID (public) | Login / signing blocked |
 | **Reown** | External wallet AppKit | Project ID (public) | External portfolio connect |
-| **Pimlico** | ERC-4337 bundler / paymaster | API key | Smart Wallet UserOps fail |
+| **Pimlico** | ERC-4337 bundler / paymaster | API key (optional) | No key: public bundler, gas in ETH. Bundler down: Smart Wallet UserOps fail |
 | **Alchemy** (or RPC) | Base JSON-RPC | API key / URL | Reads / some writes degrade |
 | **Li.Fi** | Swap / bridge quotes | Integrator + fee + optional key | Cross-chain / swap UX |
 | **Morpho** | Vault and market metadata | None | Earn / Borrow lists empty |

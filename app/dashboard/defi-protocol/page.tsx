@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { ChevronDown, RefreshCw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -20,6 +20,7 @@ import {
 } from "@/components/dashboard/PageShell";
 import AssetSegmentChartCard from "@/dashboard/_components/trackfi/AssetSegmentChartCard";
 import { useAppStore } from "@/store/useAppStore";
+import { useLoad } from "@/hooks/useLoad";
 
 function formatCurrency(value: number, mask: boolean): string {
   if (mask) return "••••••";
@@ -78,69 +79,56 @@ function ProtocolAvatar({ logo, name }: { logo?: string; name: string }) {
   );
 }
 
+const NO_ADDRESSES: string[] = [];
+const NO_POSITIONS: DeBankProtocolPosition[] = [];
+
 export default function DefiProtocolPage() {
   const isBalanceHidden = useAppStore((state) => state.isBalanceHidden);
-  const [positions, setPositions] = useState<DeBankProtocolPosition[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [selectedAddress, setSelectedAddress] = useState("");
-  const [linkedAddresses, setLinkedAddresses] = useState<string[]>([]);
-  const [isLoadingAddresses, setIsLoadingAddresses] = useState(false);
+  const [pickedAddress, setPickedAddress] = useState("");
   const [isAddressPickerOpen, setIsAddressPickerOpen] = useState(false);
+  // Set right before a load that must bypass the server-side DeBank cache.
+  const forceRefresh = useRef(false);
 
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      setIsLoadingAddresses(true);
-      try {
-        const addresses = await fetchLinkedDeBankAddresses();
-        if (cancelled) return;
-        setLinkedAddresses(addresses);
-        setSelectedAddress((prev) =>
-          prev && addresses.includes(prev) ? prev : addresses[0] ?? "",
-        );
-      } catch (err) {
-        if (cancelled) return;
-        setError(err instanceof Error ? err.message : "Failed to load linked wallet addresses");
-      } finally {
-        if (!cancelled) setIsLoadingAddresses(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const addressesQuery = useLoad({
+    key: ["debank", "linked-addresses"],
+    load: fetchLinkedDeBankAddresses,
+    errorMessage: "Failed to load linked wallet addresses",
+  });
+  const linkedAddresses = addressesQuery.data ?? NO_ADDRESSES;
+  const isLoadingAddresses = addressesQuery.loading;
+  // The picked wallet while it is still linked, else the first linked one.
+  const selectedAddress =
+    pickedAddress && linkedAddresses.includes(pickedAddress)
+      ? pickedAddress
+      : (linkedAddresses[0] ?? "");
 
-  const loadProtocolPositions = useCallback(async (targetAddress: string, refresh: boolean) => {
-    if (!targetAddress) {
-      setPositions([]);
-      setError(null);
-      return;
-    }
-    setIsLoading(true);
-    setError(null);
-    try {
-      const response = await fetchDeBankProtocolPositions(targetAddress, refresh);
-      setPositions(response.positions.filter((item) => item.usdValue > 0));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load DeFi protocol assets");
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void loadProtocolPositions(selectedAddress, false);
-  }, [loadProtocolPositions, selectedAddress]);
-
-  const applyAddress = useCallback(
-    (address: string) => {
-      setSelectedAddress(address);
-      setIsAddressPickerOpen(false);
-      void loadProtocolPositions(address, true);
+  const positionsQuery = useLoad({
+    key: ["debank", "protocol-positions", selectedAddress.toLowerCase()],
+    load: async () => {
+      const force = forceRefresh.current;
+      forceRefresh.current = false;
+      const response = await fetchDeBankProtocolPositions(selectedAddress, force);
+      return response.positions.filter((item) => item.usdValue > 0);
     },
-    [loadProtocolPositions],
-  );
+    errorMessage: "Failed to load DeFi protocol assets",
+    enabled: Boolean(selectedAddress),
+  });
+  const positions = selectedAddress ? (positionsQuery.data ?? NO_POSITIONS) : NO_POSITIONS;
+  const isLoading = positionsQuery.fetching;
+  const error = addressesQuery.error ?? (selectedAddress ? positionsQuery.error : null);
+
+  const reloadPositions = positionsQuery.refresh;
+  const refreshPositions = useCallback(() => {
+    forceRefresh.current = true;
+    void reloadPositions();
+  }, [reloadPositions]);
+
+  const applyAddress = useCallback((address: string) => {
+    // Switching wallets loads its positions fresh.
+    forceRefresh.current = true;
+    setPickedAddress(address);
+    setIsAddressPickerOpen(false);
+  }, []);
 
   const { totalValue, sortedPositions } = useMemo(() => {
     const total = positions.reduce((sum, item) => sum + item.usdValue, 0);
@@ -207,7 +195,7 @@ export default function DefiProtocolPage() {
               size="sm"
               variant="outline"
               className="rounded-full"
-              onClick={() => void loadProtocolPositions(selectedAddress, true)}
+              onClick={refreshPositions}
               disabled={isLoading || !selectedAddress}
             >
               <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? "animate-spin" : ""}`} />

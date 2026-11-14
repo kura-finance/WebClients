@@ -20,6 +20,7 @@ import { toSafeSmartAccount } from "permissionless/accounts";
 import { env } from "@/config/env";
 import type { EthereumProvider } from "@/lib/smartAccountSend";
 import { signerCopy } from "@/lib/signer/copy";
+import { PERSONAL_SAFE_CACHE_KEY } from "@/lib/localWallet/store";
 
 /** Personal Smart Wallet uses the default salt (0). Treasury uses 1. */
 export const PERSONAL_SAFE_SALT_NONCE = BigInt(0);
@@ -81,4 +82,35 @@ export async function computePersonalSafeAddress(
 ): Promise<`0x${string}`> {
   const { account } = await buildPersonalAccount(eip1193Provider);
   return getAddress(account.address);
+}
+
+const ADDRESS_RE = /^0x[a-fA-F0-9]{40}$/;
+
+/**
+ * Last Smart Wallet address derived for `eoaAddress` in this browser, or null.
+ * Lets the dashboard show the address right away and while the RPC is
+ * unreachable; callers still re-derive it and prefer the fresh result.
+ */
+export function readCachedPersonalSafe(eoaAddress: string): `0x${string}` | null {
+  try {
+    const raw = localStorage.getItem(PERSONAL_SAFE_CACHE_KEY);
+    if (!raw) return null;
+    const cached = JSON.parse(raw) as { eoa?: unknown; sca?: unknown };
+    if (typeof cached.eoa !== "string" || typeof cached.sca !== "string") return null;
+    if (cached.eoa.toLowerCase() !== eoaAddress.toLowerCase()) return null;
+    return ADDRESS_RE.test(cached.sca) ? (cached.sca as `0x${string}`) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function writeCachedPersonalSafe(eoaAddress: string, scaAddress: string): void {
+  try {
+    localStorage.setItem(
+      PERSONAL_SAFE_CACHE_KEY,
+      JSON.stringify({ eoa: eoaAddress, sca: scaAddress }),
+    );
+  } catch {
+    /* storage unavailable — the address is simply derived again next time */
+  }
 }

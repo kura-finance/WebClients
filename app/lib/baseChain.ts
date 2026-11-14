@@ -75,14 +75,19 @@ export const HOME_STABLECOINS: readonly StablecoinToken[] = [
 
 export type StablecoinBalances = Record<string, number>;
 
-/** Public Base RPCs — mainnet.base.org is last (aggressive 429 rate limits). */
+/**
+ * Public Base RPCs — mainnet.base.org is last (aggressive 429 rate limits).
+ * Every entry must answer browser requests (CORS) without a key, and must be
+ * listed in the CSP in proxy.ts.
+ */
 const PUBLIC_BASE_RPCS = [
-  "https://base.llamarpc.com",
-  "https://1rpc.io/base",
+  "https://base-rpc.publicnode.com",
+  "https://base.drpc.org",
   "https://mainnet.base.org",
 ] as const;
 
-function getBaseRpcUrls(): string[] {
+/** Base RPC endpoints in the order they are tried: configured ones, then public. */
+export function getBaseRpcUrls(): string[] {
   const urls: string[] = [];
   if (env.alchemyApiKey) {
     urls.push(`https://base-mainnet.g.alchemy.com/v2/${env.alchemyApiKey}`);

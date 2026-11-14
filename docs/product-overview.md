@@ -23,7 +23,7 @@ The backend is optional. With `NEXT_PUBLIC_BACKEND_URL` empty (the default) only
 | Org Treasury | `/dashboard/treasury` | Counterfactual / deployed Safe; holdings | No — list kept in browser localStorage (server sync: **Yes**) |
 | Approvals | `/dashboard/approvals` | Safe Transaction Service propose → sign → execute | No* (*owners on-chain) |
 | Team | `/dashboard/team` | Add/remove Safe owners, change threshold | No (on-chain; labels in localStorage) |
-| Report | `/dashboard/report` | Treasury activity (Blockscout) and CSV export | No (bank cash-flow card: **Yes**) |
+| Report | `/dashboard/report` | Treasury activity (Safe Transaction Service + Base RPC logs) and CSV export | No (bank cash-flow card: **Yes**) |
 | Earn | `/dashboard/earn/[vault]` | Morpho vault deposit/withdraw | No* (*Pimlico if Smart Wallet) |
 | Borrow | `/dashboard/borrow/[market]` | Morpho Blue borrow/repay | No* (*Pimlico if Smart Wallet) |
 | Markets | `/dashboard/markets/[symbol]` | Li.Fi swap on Base; TradingView | No* (*Pimlico) |

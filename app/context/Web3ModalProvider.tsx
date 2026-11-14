@@ -2,7 +2,7 @@
 'use client'
 
 import React, { ReactNode, useMemo } from 'react'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClientProvider } from '@tanstack/react-query'
 import { WagmiProvider, type State } from 'wagmi'
 import { createAppKit } from '@reown/appkit/react'
 import { WagmiAdapter } from '@reown/appkit-adapter-wagmi'
@@ -10,9 +10,9 @@ import { mainnet, arbitrum, polygon, type AppKitNetwork } from '@reown/appkit/ne
 import AppSessionHydrator from '@/components/AppSessionHydrator'
 import { env } from '@/config/env'
 import { features } from '@/config/features'
+import { queryClient } from '@/lib/queryClient'
 
-// 1. 設定 React Query
-const queryClient = new QueryClient()
+// 1. React Query：共用 app/lib/queryClient.ts 的快取
 
 // Reown（原 WalletConnect）專案 ID
 const projectId = env.reownProjectId

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
@@ -100,7 +100,14 @@ export default function OrgApprovalsView() {
   const isSigner = isSafeOwner(owners, personal.eoaAddress);
   const usdcBalance = treasury.stableBalances.USDC ?? 0;
 
-  const [tab, setTabState] = useState<Tab>(() => tabFromSearch(searchParams.get("tab")));
+  const urlTab = tabFromSearch(searchParams.get("tab"));
+  const [tab, setTabState] = useState<Tab>(urlTab);
+  // The URL is the source of truth: follow it on back / forward and outside links.
+  const [tabSyncedTo, setTabSyncedTo] = useState<Tab>(urlTab);
+  if (tabSyncedTo !== urlTab) {
+    setTabSyncedTo(urlTab);
+    setTabState(urlTab);
+  }
   const [busyHash, setBusyHash] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionOk, setActionOk] = useState<string | null>(null);
@@ -125,10 +132,6 @@ export default function OrgApprovalsView() {
     const qs = params.toString();
     router.replace(qs ? `/dashboard/approvals?${qs}` : "/dashboard/approvals", { scroll: false });
   };
-
-  useEffect(() => {
-    setTabState(tabFromSearch(searchParams.get("tab")));
-  }, [searchParams]);
 
   const usdcRecipients = useMemo(
     () => recipients.filter((r) => r.method === "usdc" || !!r.walletAddress),

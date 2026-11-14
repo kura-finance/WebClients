@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useState } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -25,7 +25,7 @@ import {
 } from "@/lib/morphoEarn";
 import { submitCallsSmartOrTreasury } from "@/lib/submitTradingCalls";
 import { errMessage, formatUsd, truncateAddress } from "@/lib/formatDisplay";
-import { isPimlicoConfigured } from "@/config/env";
+import { useLoad } from "@/hooks/useLoad";
 import { PORTFOLIO_TOKENS } from "@/lib/portfolioTokens";
 import { cryptoLogoUrl } from "@/lib/assetLogos";
 import { isSignerConfigured, useSignerWallet } from "@/lib/signer";
@@ -71,83 +71,52 @@ export default function EarnVaultDetailView({ address }: { address: string }) {
   } = useTradingAccount();
   const signerWallet = useSignerWallet();
 
-  const [detail, setDetail] = useState<MorphoVaultDetail | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
   const [mode, setMode] = useState<"deposit" | "withdraw">("deposit");
   const [amount, setAmount] = useState("");
-  const [assetBal, setAssetBal] = useState(0);
-  const [vaultBal, setVaultBal] = useState(0);
-  const [positionLoading, setPositionLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [txHash, setTxHash] = useState<string | null>(null);
   const [proposedHash, setProposedHash] = useState<string | null>(null);
 
-  const loadDetail = useCallback(
-    async (isRefresh = false) => {
-      if (isRefresh) setRefreshing(true);
-      else setLoading(true);
-      setError(null);
-      try {
-        const next = await fetchEarnVaultDetail(address);
-        if (!next) {
-          setDetail(null);
-          setError("Vault not found on Morpho.");
-        } else {
-          setDetail(next);
-        }
-      } catch (e) {
-        setError(errMessage(e));
-        setDetail(null);
-      } finally {
-        setLoading(false);
-        setRefreshing(false);
-      }
+  const detailQuery = useLoad({
+    key: ["earn", "vault", address.toLowerCase()],
+    load: async (): Promise<MorphoVaultDetail> => {
+      const next = await fetchEarnVaultDetail(address);
+      if (!next) throw new Error("Vault not found on Morpho.");
+      return next;
     },
-    [address],
-  );
+    errorMessage: "Something went wrong.",
+    describeError: errMessage,
+  });
+  // A failed load shows the error instead of an earlier copy of the vault.
+  const detail = detailQuery.error ? null : (detailQuery.data ?? null);
+  const { loading, refreshing, error } = detailQuery;
 
-  const loadPosition = useCallback(async () => {
-    if (!scaAddress || !detail) {
-      setAssetBal(0);
-      setVaultBal(0);
-      return;
-    }
-    setPositionLoading(true);
-    try {
-      const { depositAddress } = resolveDepositVault(detail.address);
-      const [a, pos] = await Promise.all([
+  const positionQuery = useLoad({
+    key: ["earn", "position", detail?.address.toLowerCase() ?? null, scaAddress?.toLowerCase() ?? null],
+    load: async () => {
+      const vault = detail as MorphoVaultDetail;
+      const { depositAddress } = resolveDepositVault(vault.address);
+      const [assetBal, pos] = await Promise.all([
         readErc20Balance(
-          detail.assetAddress as `0x${string}`,
+          vault.assetAddress as `0x${string}`,
           scaAddress as `0x${string}`,
-          detail.assetDecimals,
+          vault.assetDecimals,
         ),
-        readVaultPosition(
-          depositAddress,
-          scaAddress as `0x${string}`,
-          detail.assetDecimals,
-        ),
+        readVaultPosition(depositAddress, scaAddress as `0x${string}`, vault.assetDecimals),
       ]);
-      setAssetBal(a);
-      setVaultBal(pos.assetsFormatted);
-    } catch {
-      setAssetBal(0);
-      setVaultBal(0);
-    } finally {
-      setPositionLoading(false);
-    }
-  }, [scaAddress, detail]);
-
-  useEffect(() => {
-    void loadDetail(false);
-  }, [loadDetail]);
-
-  useEffect(() => {
-    void loadPosition();
-  }, [loadPosition]);
+      return { assetBal, vaultBal: pos.assetsFormatted };
+    },
+    errorMessage: "Failed to load position",
+    enabled: Boolean(scaAddress && detail),
+  });
+  // No wallet, no vault or a failed read all show a zero position.
+  const position = scaAddress && detail && !positionQuery.error ? positionQuery.data : undefined;
+  const assetBal = position?.assetBal ?? 0;
+  const vaultBal = position?.vaultBal ?? 0;
+  const positionLoading = positionQuery.fetching;
+  const refreshDetail = detailQuery.refresh;
+  const loadPosition = positionQuery.refresh;
 
   const numeric = Number(amount);
   const available = mode === "deposit" ? assetBal : vaultBal;
@@ -155,7 +124,6 @@ export default function EarnVaultDetailView({ address }: { address: string }) {
     !!detail &&
     !!scaAddress &&
     !!signerWallet &&
-    (isTreasury || isPimlicoConfigured()) &&
     numeric > 0 &&
     numeric <= available &&
     !busy;
@@ -209,7 +177,7 @@ export default function EarnVaultDetailView({ address }: { address: string }) {
         await loadPosition();
       }
       setAmount("");
-      void loadDetail(true);
+      void refreshDetail();
     } catch (e) {
       setActionError(errMessage(e));
     } finally {
@@ -303,7 +271,7 @@ export default function EarnVaultDetailView({ address }: { address: string }) {
             className="rounded-full text-[var(--kura-text-secondary)]"
             disabled={refreshing}
             onClick={() => {
-              void loadDetail(true);
+              void refreshDetail();
               void loadPosition();
             }}
           >

@@ -16,6 +16,8 @@ import {
 
 export type { OrgTreasury, TreasurySource };
 
+const LEGACY_ORG_KEY = "kura-org-banking-v7";
+
 function uid(prefix: string): string {
   return `${prefix}_${Math.random().toString(36).slice(2, 10)}`;
 }
@@ -365,31 +367,38 @@ export const useOrgStore = create<OrgState>()(
         treasuries: state.treasuries,
         activeTreasuryId: state.activeTreasuryId,
       }),
-      onRehydrateStorage: () => (state) => {
+      // Runs while the store is still being created (localStorage rehydrates
+      // synchronously), so it must not touch `useOrgStore`: doing so throws and
+      // leaves `persist.hasHydrated()` false forever. Work on the merged state.
+      merge: (persisted, current) => {
+        const merged = { ...current, ...(persisted as Partial<OrgState> | undefined) };
+        let { treasuries, activeTreasuryId } = merged;
         try {
-          const legacyRaw = localStorage.getItem("kura-org-banking-v7");
-          if (legacyRaw && (!state?.treasuries || state.treasuries.length === 0)) {
+          const legacyRaw = localStorage.getItem(LEGACY_ORG_KEY);
+          if (legacyRaw && treasuries.length === 0) {
             const migrated = migrateLegacyTreasuries(JSON.parse(legacyRaw));
             if (migrated) {
-              useOrgStore.setState({
-                treasuries: migrated.treasuries,
-                activeTreasuryId: migrated.activeTreasuryId,
-              });
+              treasuries = migrated.treasuries;
+              activeTreasuryId = migrated.activeTreasuryId;
             }
-            localStorage.removeItem("kura-org-banking-v7");
+            // Rehydration does not write back. Once the store exists, save the
+            // migrated workspace under the new key, and only then drop the old one.
+            queueMicrotask(() => {
+              try {
+                useOrgStore.setState({});
+                localStorage.removeItem(LEGACY_ORG_KEY);
+              } catch {
+                /* keep the legacy copy; migration runs again next load */
+              }
+            });
           }
         } catch {
           /* ignore migration errors */
         }
-        const current = useOrgStore.getState();
-        if (
-          current.activeTreasuryId &&
-          !current.treasuries.some((t) => t.id === current.activeTreasuryId)
-        ) {
-          useOrgStore.setState({
-            activeTreasuryId: current.treasuries[0]?.id ?? null,
-          });
+        if (activeTreasuryId && !treasuries.some((t) => t.id === activeTreasuryId)) {
+          activeTreasuryId = treasuries[0]?.id ?? null;
         }
+        return { ...merged, treasuries, activeTreasuryId };
       },
     },
   ),

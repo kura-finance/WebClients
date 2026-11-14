@@ -10,6 +10,7 @@
 | On-chain (Base) | viem, permissionless / Pimlico, Safe |
 | DeFi data | Morpho GraphQL |
 | Multisig queue | Safe Transaction Service (Base) |
+| Transfer history | Safe Transaction Service + Base RPC logs (`app/lib/chain/walletTransfers.ts`) |
 | Swaps / bridge | Li.Fi |
 | Tokenized stocks | Dinari (via Kura API) |
 | Charts | TradingView widgets |
@@ -35,6 +36,10 @@
 ```
 
 The Kura API (left branch) is **optional**. `app/config/features.ts` derives one flag per product area from `NEXT_PUBLIC_BACKEND_URL`. When it is empty the client only uses the right branch, without Privy: an unlocked browser wallet is the app session (no account, token exchange or membership check), the personal Safe address is derived locally from that wallet's EOA (`app/lib/personalSafe.ts`), the Treasury list lives in localStorage, and backend-only routes and UI are hidden (`FeatureRouteGuard` redirects direct visits to `/dashboard`).
+
+Builds without `NEXT_PUBLIC_BACKEND_URL` also leave the Privy SDK out of the bundle: `next.config.ts` resolves `@privy-io/react-auth` to `app/lib/stubs/privyReactAuth.tsx`, whose exports throw if anything calls them.
+
+Views load remote data through `app/hooks/useLoad.ts` (a thin wrapper over `@tanstack/react-query`, one shared cache in `app/lib/queryClient.ts`, cleared when the wallet session ends) rather than calling `setState` from effects; `react-hooks/set-state-in-effect` is enforced as an error. Swap and bridge quotes go through `useSwapQuote` / `useBridgeQuote`, which only ever return a quote for exactly the inputs currently on screen.
 
 ### Key custody: the signer
 

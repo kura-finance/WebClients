@@ -62,7 +62,7 @@ Backend mode:
 | Pimlico | UserOp inclusion / paymaster behaviour |
 | Alchemy (or RPC) | Honest chain reads |
 | Morpho API | Market / vault metadata integrity |
-| Safe Transaction Service | Queue availability and authenticity of stored txs |
+| Safe Transaction Service | Queue availability and authenticity of stored txs; completeness of the transfer history it serves (it sees which Safe addresses are looked up) |
 | Li.Fi | Quote / route integrity |
 | Dinari | KYC, quotes, and settlement |
 | TradingView | Chart feeds |
@@ -71,4 +71,4 @@ Backend mode:
 
 ## Dual-repo dependency
 
-Privy login, full TrackFi, server-side Treasury persistence, billing, passkeys, and Dinari **require** a backend deployment. The web client alone is the on-chain wallet (Smart Wallet, Treasury, Approvals, Team, Earn / Borrow / Markets) with the key in the browser vault; it needs only a Base RPC and Pimlico.
+Privy login, full TrackFi, server-side Treasury persistence, billing, passkeys, and Dinari **require** a backend deployment. The web client alone is the on-chain wallet (Smart Wallet, Treasury, Approvals, Team, Earn / Borrow / Markets) with the key in the browser vault; it needs only a Base RPC and a Pimlico bundler (the public one when no key is set).

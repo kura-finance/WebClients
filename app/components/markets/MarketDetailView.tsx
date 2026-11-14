@@ -1,22 +1,23 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Loader2 } from "lucide-react";
 import { PORTFOLIO_TOKENS } from "@/lib/portfolioTokens";
-import { fetchCoinGeckoPrices } from "@/lib/coingeckoPrices";
 import { tradingViewSymbol } from "@/lib/tradingViewSymbols";
 import { cryptoLogoUrl } from "@/lib/assetLogos";
 import { fetchPortfolioBalances, USDC_BASE } from "@/lib/baseChain";
+import { formatSwapReceive, toTokenWei } from "@/lib/lifiSwap";
+import { useCoinGeckoPrices } from "@/hooks/useCoinGeckoPrices";
+import { useLoad } from "@/hooks/useLoad";
+import { useSwapQuote } from "@/hooks/useSwapQuote";
 import {
-  fetchSwapQuote,
-  formatSwapReceive,
-  toTokenWei,
-  type SwapQuote,
-} from "@/lib/lifiSwap";
-import { buildLiFiSwapCalls, executeLiFiSwapFromSafe } from "@/lib/smartAccountSend";
+  buildLiFiSwapCalls,
+  ETH_GAS_NOTICE,
+  executeLiFiSwapFromSafe,
+} from "@/lib/smartAccountSend";
 import { proposeTreasuryCalls } from "@/lib/proposeTreasuryCalls";
-import { isPimlicoConfigured } from "@/config/env";
+import { paysGasInUsdc } from "@/config/env";
 import { useSignerWallet } from "@/lib/signer";
 import { signerCopy } from "@/lib/signer/copy";
 import PrivyEoaSync from "@/components/wallet/PrivyEoaSync";
@@ -42,6 +43,8 @@ function formatPrice(price: number): string {
   }
   return `$${price.toLocaleString("en-US", { maximumFractionDigits: 6 })}`;
 }
+
+const NO_BALANCES: Record<string, number> = {};
 
 function errMessage(e: unknown): string {
   if (e instanceof Error) return e.message;
@@ -71,111 +74,54 @@ export default function MarketDetailView({ symbol }: MarketDetailViewProps) {
   const { applyEoaAddress, record } = personal;
   const signerWallet = useSignerWallet();
 
-  const [price, setPrice] = useState(0);
-  const [change24h, setChange24h] = useState(0);
-  const [loading, setLoading] = useState(true);
   const [side, setSide] = useState<"buy" | "sell">("buy");
   const [amount, setAmount] = useState("");
-  const [balances, setBalances] = useState<Record<string, number>>({});
-  const [quote, setQuote] = useState<SwapQuote | null>(null);
-  const [quoteError, setQuoteError] = useState<string | null>(null);
-  const [isQuoting, setIsQuoting] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [txError, setTxError] = useState<string | null>(null);
   const [txHash, setTxHash] = useState<string | null>(null);
   const [proposedHash, setProposedHash] = useState<string | null>(null);
+
+  const priceQuery = useCoinGeckoPrices();
+  const priceRow = token ? priceQuery.prices[token.geckoId] : undefined;
+  const price = priceRow?.usd ?? 0;
+  const change24h = priceRow?.usd_24h_change ?? 0;
+  const loading = Boolean(token) && priceQuery.loading;
+
+  const balancesQuery = useLoad({
+    key: ["portfolio", "balances", scaAddress?.toLowerCase() ?? null],
+    load: () => fetchPortfolioBalances(scaAddress as `0x${string}`),
+    errorMessage: "Failed to load balances",
+    enabled: Boolean(scaAddress),
+  });
+  // No wallet or a failed read shows no balances.
+  const balances: Record<string, number> =
+    scaAddress && !balancesQuery.error ? (balancesQuery.data ?? NO_BALANCES) : NO_BALANCES;
+  const loadBalances = balancesQuery.refresh;
 
   const numericAmount = Number(amount);
   const usdcBal = balances.USDC ?? 0;
   const tokenBal = balances[token?.symbol ?? ""] ?? 0;
   const available = side === "buy" ? usdcBal : tokenBal;
 
-  useEffect(() => {
-    if (!token) {
-      setLoading(false);
-      return;
-    }
-    let cancelled = false;
-    void fetchCoinGeckoPrices()
-      .then((prices) => {
-        if (cancelled) return;
-        const row = prices[token.geckoId];
-        setPrice(row?.usd ?? 0);
-        setChange24h(row?.usd_24h_change ?? 0);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [token]);
-
-  const loadBalances = useCallback(async () => {
-    if (!scaAddress) {
-      setBalances({});
-      return;
-    }
-    try {
-      const next = await fetchPortfolioBalances(scaAddress as `0x${string}`);
-      setBalances(next);
-    } catch {
-      setBalances({});
-    }
-  }, [scaAddress]);
-
-  useEffect(() => {
-    void loadBalances();
-  }, [loadBalances]);
-
-  useEffect(() => {
-    if (!scaAddress || !tradeAddress || !(numericAmount > 0) || numericAmount > available) {
-      setQuote(null);
-      setQuoteError(null);
-      return;
-    }
-
-    const fromToken = side === "buy" ? USDC_BASE : tradeAddress;
-    const toToken = side === "buy" ? tradeAddress : USDC_BASE;
-    const fromDecimals = side === "buy" ? 6 : (token?.decimals ?? 18);
-    const wei = toTokenWei(numericAmount, fromDecimals);
-    if (wei === "0") return;
-
-    let cancelled = false;
-    const timer = window.setTimeout(() => {
-      setIsQuoting(true);
-      setQuoteError(null);
-      void fetchSwapQuote({
-        fromAmountWei: wei,
-        fromAddress: scaAddress,
-        fromTokenAddress: fromToken,
-        toTokenAddress: toToken,
-      })
-        .then((q) => {
-          if (!cancelled) setQuote(q);
-        })
-        .catch((e) => {
-          if (!cancelled) {
-            setQuote(null);
-            setQuoteError(errMessage(e));
-          }
-        })
-        .finally(() => {
-          if (!cancelled) setIsQuoting(false);
-        });
-    }, 400);
-
-    return () => {
-      cancelled = true;
-      window.clearTimeout(timer);
-    };
-  }, [scaAddress, tradeAddress, numericAmount, available, side, token?.decimals]);
+  const fromAmountWei =
+    numericAmount > 0 && numericAmount <= available
+      ? toTokenWei(numericAmount, side === "buy" ? 6 : (token?.decimals ?? 18))
+      : "0";
+  const { quote, quoteError, isQuoting } = useSwapQuote(
+    scaAddress && tradeAddress && fromAmountWei !== "0"
+      ? {
+          fromAmountWei,
+          fromAddress: scaAddress,
+          fromTokenAddress: side === "buy" ? USDC_BASE : tradeAddress,
+          toTokenAddress: side === "buy" ? tradeAddress : USDC_BASE,
+        }
+      : null,
+  );
 
   const canTrade =
     !!scaAddress &&
     !!signerWallet &&
     !!tradeAddress &&
-    (isTreasury || isPimlicoConfigured()) &&
     !!quote &&
     !isQuoting &&
     !isSending &&
@@ -208,7 +154,6 @@ export default function MarketDetailView({ symbol }: MarketDetailViewProps) {
         });
         setProposedHash(safeTxHash);
         setAmount("");
-        setQuote(null);
       } else {
         const hash = await executeLiFiSwapFromSafe({
           eip1193Provider: provider,
@@ -218,7 +163,6 @@ export default function MarketDetailView({ symbol }: MarketDetailViewProps) {
         });
         setTxHash(hash);
         setAmount("");
-        setQuote(null);
         await loadBalances();
         await personal.refresh();
       }
@@ -320,7 +264,6 @@ export default function MarketDetailView({ symbol }: MarketDetailViewProps) {
               onClick={() => {
                 setSide("buy");
                 setAmount("");
-                setQuote(null);
                 setTxError(null);
               }}
               className={`rounded-lg py-2 text-sm font-semibold transition-colors ${
@@ -336,7 +279,6 @@ export default function MarketDetailView({ symbol }: MarketDetailViewProps) {
               onClick={() => {
                 setSide("sell");
                 setAmount("");
-                setQuote(null);
                 setTxError(null);
               }}
               className={`rounded-lg py-2 text-sm font-semibold transition-colors ${
@@ -419,10 +361,8 @@ export default function MarketDetailView({ symbol }: MarketDetailViewProps) {
               No Smart Wallet found. {signerCopy.signIn} — setup runs automatically.
             </p>
           ) : null}
-          {!isTreasury && !isPimlicoConfigured() ? (
-            <p className="mb-3 text-xs text-[var(--kura-warning-fg)]">
-              Set NEXT_PUBLIC_PIMLICO_API_KEY to enable Smart Wallet swaps.
-            </p>
+          {!isTreasury && !paysGasInUsdc() ? (
+            <p className="mb-3 text-xs text-[var(--kura-text-secondary)]">{ETH_GAS_NOTICE}</p>
           ) : null}
           {quoteError ? <p className="mb-3 text-xs text-[var(--kura-error-fg)]">{quoteError}</p> : null}
           {txError ? <p className="mb-3 text-xs text-[var(--kura-error-fg)]">{txError}</p> : null}

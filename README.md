@@ -42,7 +42,7 @@ cp .env.example .env.local
 npm run dev
 ```
 
-Nothing is required to open the app and create a wallet. Sending from the Smart Wallet needs Pimlico, and a Base RPC is recommended. A backend URL, a Privy app ID and a Reown project ID are only needed for backend mode. Full list and production Cloud Run steps: **[docs/deploy.md](docs/deploy.md)**.
+Nothing is required to open the app and create a wallet. Sending from the Smart Wallet works without keys too (Pimlico's public bundler, gas paid in ETH); a Pimlico key lets users pay gas in USDC, and a Base RPC is recommended. A backend URL, a Privy app ID and a Reown project ID are only needed for backend mode. Full list and production Cloud Run steps: **[docs/deploy.md](docs/deploy.md)**.
 
 ```bash
 npm run lint

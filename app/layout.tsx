@@ -70,7 +70,13 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${inter.variable} ${newsreader.variable}`}>
+    // The theme script below adds `dark` to <html> before React hydrates, so its
+    // class list legitimately differs from the server's: don't report that.
+    <html
+      lang="en"
+      className={`${inter.variable} ${newsreader.variable}`}
+      suppressHydrationWarning
+    >
       <head>
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5, viewport-fit=cover" />
         <meta name="mobile-web-app-capable" content="yes" />

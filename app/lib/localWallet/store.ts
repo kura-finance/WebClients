@@ -15,6 +15,8 @@ import { WalletLockedError } from "./provider.ts";
 import { decryptVault, encryptVault, parseVaultRecord, type VaultRecord } from "./vault.ts";
 
 export const VAULT_STORAGE_KEY = "kura-wallet-vault-v1";
+/** Last derived Smart Wallet address for the stored key (see lib/personalSafe.ts). */
+export const PERSONAL_SAFE_CACHE_KEY = "kura-personal-safe-v1";
 /** Lock after this long without user activity. */
 export const AUTO_LOCK_MS = 15 * 60 * 1000;
 
@@ -202,6 +204,7 @@ export function removeVault(): void {
   session = null;
   clearIdleTimer();
   storage()?.removeItem(VAULT_STORAGE_KEY);
+  storage()?.removeItem(PERSONAL_SAFE_CACHE_KEY);
   setSnapshot({ status: "none", address: null });
 }
 

@@ -19,7 +19,7 @@ Related: [environment template](../.env.example) · [architecture](architecture.
 | Reown project — backend mode only | External wallet connect (TrackFi) |
 | GCP project (production) | Artifact Registry / GCR + Cloud Run |
 
-Full TrackFi, server-side Treasuries persistence, bank transfers, billing, passkeys, and tokenized stocks require a correctly configured backend. With `NEXT_PUBLIC_BACKEND_URL` empty the app runs with a Base RPC and Pimlico alone — no Privy, no account: the user's key lives in a password-encrypted vault in their browser. Available: Smart Wallet, Treasury (browser-local list), Approvals, Team, Report, Earn, Borrow, Markets. Serve it over HTTPS (WebCrypto needs a secure context) and treat the deployed bundle as part of the wallet: whoever can change it can take users' keys.
+Full TrackFi, server-side Treasuries persistence, bank transfers, billing, passkeys, and tokenized stocks require a correctly configured backend. With `NEXT_PUBLIC_BACKEND_URL` empty the app runs with a Base RPC alone (a Pimlico key is optional: without one, Smart Wallet gas is paid in ETH through Pimlico's public bundler) — no Privy, no account: the user's key lives in a password-encrypted vault in their browser. Available: Smart Wallet, Treasury (browser-local list), Approvals, Team, Report, Earn, Borrow, Markets. Serve it over HTTPS (WebCrypto needs a secure context) and treat the deployed bundle as part of the wallet: whoever can change it can take users' keys.
 
 ---
 
@@ -70,7 +70,7 @@ Publishable keys are visible to every user of that build. Treat leaks as rotatio
 
 | Variable | Purpose |
 |----------|---------|
-| `NEXT_PUBLIC_PIMLICO_API_KEY` | Smart Wallet UserOps (Transfer, Earn, Borrow, Markets) |
+| `NEXT_PUBLIC_PIMLICO_API_KEY` | Smart Wallet UserOps (Transfer, Earn, Borrow, Markets) with gas in USDC. Optional: without it the public Pimlico bundler is used and gas is paid in ETH |
 | `NEXT_PUBLIC_ALCHEMY_API_KEY` or `NEXT_PUBLIC_BASE_RPC_URL` | Base RPC (public `mainnet.base.org` rate-limits) |
 | `NEXT_PUBLIC_PAY_GAS_IN_USDC` | Pay UserOp gas in USDC (`true` by default) |
 | `NEXT_PUBLIC_LIFI_INTEGRATOR` | Li.Fi integrator id |
@@ -188,7 +188,7 @@ PR / push **CI** (lint + typecheck) lives in [`.github/workflows/ci.yml`](../.gi
 |---------|----------------|
 | Login works locally, not prod | Wrong Privy App ID at build, or origin not allowlisted |
 | `/api/*` 404 | Wrong `NEXT_PUBLIC_BACKEND_URL` at build |
-| Smart Wallet actions fail | Missing Pimlico build-arg |
+| Smart Wallet actions fail | No ETH in the Safe when there is no Pimlico key (gas is paid in ETH), or a wrong Pimlico build-arg |
 | Morpho empty | Network / CSP to `api.morpho.org` |
 | Approvals stuck | Safe undeployed / EOA not owner / TX Service blocked |
 | Stale env in prod | Runtime env changed without rebuild |

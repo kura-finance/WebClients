@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   ArrowDownLeft,
@@ -43,7 +43,7 @@ import {
   syncUpdateTreasury,
 } from "@/lib/treasurySync";
 import { treasuryErrorCode } from "@/lib/treasuryApi";
-import { isPimlicoConfigured } from "@/config/env";
+import { paysGasInUsdc } from "@/config/env";
 import { features } from "@/config/features";
 import { isSignerConfigured, useSignerWallet } from "@/lib/signer";
 import { signerCopy } from "@/lib/signer/copy";
@@ -210,7 +210,14 @@ export default function TreasuryView() {
   const [discoverError, setDiscoverError] = useState<string | null>(null);
   const [previewAddress, setPreviewAddress] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
-  const [renameDraft, setRenameDraft] = useState("");
+  const [renameDraft, setRenameDraft] = useState(treasury.name ?? "");
+  // Start the rename field over when another Treasury is selected or it is renamed.
+  const renameSource = `${treasury.treasuryId ?? ""}:${treasury.name ?? ""}`;
+  const [renameSyncedTo, setRenameSyncedTo] = useState(renameSource);
+  if (renameSyncedTo !== renameSource) {
+    setRenameSyncedTo(renameSource);
+    setRenameDraft(treasury.name ?? "");
+  }
 
   const stableCash = useMemo(
     () => HOME_STABLECOINS.reduce((sum, t) => sum + (treasury.stableBalances[t.symbol] ?? 0), 0),
@@ -219,7 +226,9 @@ export default function TreasuryView() {
 
   const personalUsdc = personal.stableBalances.USDC ?? 0;
   const treasuryUsdc = treasury.stableBalances.USDC ?? 0;
-  const canActivate = !treasury.deployed && treasuryUsdc >= 0.05;
+  // USDC gas needs USDC on the Safe first; ETH gas is checked when the UserOp is sent.
+  const gasInUsdc = paysGasInUsdc();
+  const canActivate = !treasury.deployed && (!gasInUsdc || treasuryUsdc >= 0.05);
 
   const bankCash = useMemo(
     () =>
@@ -242,10 +251,6 @@ export default function TreasuryView() {
 
   const refreshing =
     treasury.loading || treasury.stablesLoading || activityLoading || holdings.loading;
-
-  React.useEffect(() => {
-    setRenameDraft(treasury.name ?? "");
-  }, [treasury.treasuryId, treasury.name]);
 
   const handleRefresh = () => {
     void treasury.refresh();
@@ -293,11 +298,7 @@ export default function TreasuryView() {
   const handleActivate = async () => {
     setActionError(null);
     setActionOk(null);
-    if (!isPimlicoConfigured()) {
-      setActionError("Pimlico is not configured. Set NEXT_PUBLIC_PIMLICO_API_KEY.");
-      return;
-    }
-    if (treasuryUsdc < 0.05) {
+    if (gasInUsdc && treasuryUsdc < 0.05) {
       setActionError("Fund at least ~0.05 USDC on Base first (needed for network fees).");
       return;
     }
@@ -370,12 +371,9 @@ export default function TreasuryView() {
     setBindAddress("");
     setDiscoverError(null);
     setBindOpen(true);
-  }, [treasuries]);
-
-  useEffect(() => {
-    if (!bindOpen) return;
+    // Look for importable Safes as the dialog opens; "Refresh" in it runs this again.
     void discoverOwnedSafes();
-  }, [bindOpen, discoverOwnedSafes]);
+  }, [treasuries, discoverOwnedSafes]);
 
   const handleImportSelected = async () => {
     setActionError(null);
@@ -600,10 +598,6 @@ export default function TreasuryView() {
     }
     if (amount > personalUsdc) {
       setActionError(`Insufficient Smart Wallet USDC (${personalUsdc.toFixed(2)} available).`);
-      return;
-    }
-    if (!isPimlicoConfigured()) {
-      setActionError("Pimlico is not configured.");
       return;
     }
     setBusy("fund");
@@ -860,8 +854,10 @@ export default function TreasuryView() {
               </p>
               <p className="mt-1 text-xs leading-relaxed text-[var(--kura-text-secondary)]">
                 Your {signerCopy.eoa} still owns this Safe. The contract is not on-chain yet — send USDC on
-                Base to the address below (counterfactual balances work). Keep ~0.05 USDC for gas,
-                then Activate.
+                Base to the address below (counterfactual balances work).{" "}
+                {gasInUsdc
+                  ? "Keep ~0.05 USDC for gas, then Activate."
+                  : "Network fees are paid in ETH: also send a little ETH on Base, then Activate."}
               </p>
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 <code className="break-all rounded-lg bg-[var(--kura-bg-lighter)] px-2.5 py-1.5 font-mono text-[11px] text-[var(--kura-text)]">

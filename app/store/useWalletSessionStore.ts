@@ -4,6 +4,7 @@
  */
 
 import { create } from "zustand";
+import { queryClient } from "@/lib/queryClient";
 
 interface WalletSessionState {
   eoaOverride: string | null;
@@ -26,5 +27,9 @@ export const useWalletSessionStore = create<WalletSessionState>((set) => ({
     if (!/^0x[a-fA-F0-9]{40}$/.test(trimmed)) return;
     set({ scaOverride: trimmed });
   },
-  clearWalletSession: () => set({ eoaOverride: null, scaOverride: null }),
+  clearWalletSession: () => {
+    set({ eoaOverride: null, scaOverride: null });
+    // Balances, positions and history loaded for this wallet go with the session.
+    queryClient.clear();
+  },
 }));

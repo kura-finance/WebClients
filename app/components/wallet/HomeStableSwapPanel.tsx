@@ -1,16 +1,12 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import { ArrowDownUp, ChevronDown, Loader2 } from "lucide-react";
 import { HOME_STABLECOINS, type StablecoinBalances, type StablecoinToken } from "@/lib/baseChain";
-import {
-  fetchSwapQuote,
-  formatSwapReceive,
-  toTokenWei,
-  type SwapQuote,
-} from "@/lib/lifiSwap";
-import { executeLiFiSwapFromSafe } from "@/lib/smartAccountSend";
-import { isPimlicoConfigured } from "@/config/env";
+import { formatSwapReceive, toTokenWei } from "@/lib/lifiSwap";
+import { useSwapQuote } from "@/hooks/useSwapQuote";
+import { ETH_GAS_NOTICE, executeLiFiSwapFromSafe } from "@/lib/smartAccountSend";
+import { paysGasInUsdc } from "@/config/env";
 import { cryptoLogoUrl } from "@/lib/assetLogos";
 import { isSignerConfigured, useSignerWallet } from "@/lib/signer";
 import { signerCopy } from "@/lib/signer/copy";
@@ -69,11 +65,13 @@ function HomeStableSwapPanelInner({
   const signerWallet = useSignerWallet();
 
   const [fromSymbol, setFromSymbol] = useState("USDC");
-  const [toSymbol, setToSymbol] = useState("EURC");
+  const [toChoice, setToSymbol] = useState("EURC");
+  // The two sides are never the same token: fall back to another stablecoin.
+  const toSymbol =
+    toChoice === fromSymbol
+      ? (HOME_STABLECOINS.find((t) => t.symbol !== fromSymbol)?.symbol ?? toChoice)
+      : toChoice;
   const [amount, setAmount] = useState("");
-  const [quote, setQuote] = useState<SwapQuote | null>(null);
-  const [quoteError, setQuoteError] = useState<string | null>(null);
-  const [isQuoting, setIsQuoting] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [txError, setTxError] = useState<string | null>(null);
   const [txHash, setTxHash] = useState<string | null>(null);
@@ -87,66 +85,28 @@ function HomeStableSwapPanelInner({
     setFromSymbol(toSymbol);
     setToSymbol(fromSymbol);
     setAmount("");
-    setQuote(null);
-    setQuoteError(null);
   };
 
-  useEffect(() => {
-    if (fromSymbol === toSymbol) {
-      const next = HOME_STABLECOINS.find((t) => t.symbol !== fromSymbol);
-      if (next) setToSymbol(next.symbol);
-    }
-  }, [fromSymbol, toSymbol]);
-
-  useEffect(() => {
-    if (
-      !scaAddress ||
-      fromToken.address.toLowerCase() === toToken.address.toLowerCase() ||
-      !(numericAmount > 0) ||
-      numericAmount > available
-    ) {
-      setQuote(null);
-      setQuoteError(null);
-      return;
-    }
-
-    const wei = toTokenWei(numericAmount, fromToken.decimals);
-    if (wei === "0") return;
-
-    let cancelled = false;
-    const timer = window.setTimeout(() => {
-      setIsQuoting(true);
-      setQuoteError(null);
-      void fetchSwapQuote({
-        fromAmountWei: wei,
-        fromAddress: scaAddress,
-        fromTokenAddress: fromToken.address,
-        toTokenAddress: toToken.address,
-      })
-        .then((q) => {
-          if (!cancelled) setQuote(q);
-        })
-        .catch((e) => {
-          if (!cancelled) {
-            setQuote(null);
-            setQuoteError(errMessage(e));
-          }
-        })
-        .finally(() => {
-          if (!cancelled) setIsQuoting(false);
-        });
-    }, 400);
-
-    return () => {
-      cancelled = true;
-      window.clearTimeout(timer);
-    };
-  }, [scaAddress, fromToken, toToken, numericAmount, available]);
+  const fromAmountWei =
+    numericAmount > 0 && numericAmount <= available
+      ? toTokenWei(numericAmount, fromToken.decimals)
+      : "0";
+  const { quote, quoteError, isQuoting } = useSwapQuote(
+    scaAddress &&
+      fromToken.address.toLowerCase() !== toToken.address.toLowerCase() &&
+      fromAmountWei !== "0"
+      ? {
+          fromAmountWei,
+          fromAddress: scaAddress,
+          fromTokenAddress: fromToken.address,
+          toTokenAddress: toToken.address,
+        }
+      : null,
+  );
 
   const canSwap =
     !!scaAddress &&
     !!signerWallet &&
-    isPimlicoConfigured() &&
     !!quote &&
     !isQuoting &&
     !isSending &&
@@ -171,7 +131,6 @@ function HomeStableSwapPanelInner({
       });
       setTxHash(hash);
       setAmount("");
-      setQuote(null);
       onSwapped?.();
     } catch (e) {
       setTxError(errMessage(e));
@@ -248,10 +207,8 @@ function HomeStableSwapPanelInner({
             {signerCopy.connectWith} to swap from your Smart Wallet.
           </p>
         ) : null}
-        {scaAddress && !isPimlicoConfigured() ? (
-          <p className="text-xs text-[var(--kura-warning-fg)]">
-            Set NEXT_PUBLIC_PIMLICO_API_KEY to enable Smart Wallet swaps.
-          </p>
+        {scaAddress && !paysGasInUsdc() ? (
+          <p className="text-xs text-[var(--kura-text-secondary)]">{ETH_GAS_NOTICE}</p>
         ) : null}
         {quoteError ? <p className="text-xs text-[var(--kura-error-fg)]">{quoteError}</p> : null}
         {txError ? <p className="text-xs text-[var(--kura-error-fg)]">{txError}</p> : null}

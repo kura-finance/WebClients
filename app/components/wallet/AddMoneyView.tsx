@@ -13,11 +13,13 @@ import {
 } from "lucide-react";
 import { useHomeWallet } from "@/hooks/useHomeWallet";
 import { useAppStore } from "@/store/useAppStore";
+import { paysGasInUsdc } from "@/config/env";
 import { features } from "@/config/features";
 import { isSignerConfigured } from "@/lib/signer";
 import PrivyEoaSync from "@/components/wallet/PrivyEoaSync";
 import BridgeVerifyGate from "@/components/wallet/BridgeVerifyGate";
 import { Button } from "@/components/ui/button";
+import { QrCode } from "@/components/ui/QrCode";
 import { DashboardPage } from "@/components/dashboard/PageShell";
 import { ApiError } from "@/lib/errorHandler";
 import {
@@ -296,7 +298,11 @@ function BankTransferPanel({
     [customer, smartAddress],
   );
 
+  // Bank deposits (Bridge) keep their hand-written loaders: the flow creates
+  // server-side virtual accounts and cannot be exercised without a backend, so
+  // it was left as it is rather than rewritten untested. See TODO.md.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void refresh();
   }, [refresh]);
 
@@ -313,6 +319,7 @@ function BankTransferPanel({
     }
     const pending = getPendingFiatEndorsement(customer, currency);
     if (pending) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- see the note above
       setPendingEndorsement((prev) => ({ ...prev, [currency]: pending }));
       return;
     }
@@ -622,10 +629,6 @@ function CryptoDepositPanel({
   copied: string | null;
   onCopy: (key: string, value: string) => void;
 }) {
-  const qrSrc = address
-    ? `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(address)}`
-    : null;
-
   return (
     <>
       <h1 className="text-3xl font-semibold tracking-tight text-[var(--kura-text)]">
@@ -646,9 +649,8 @@ function CryptoDepositPanel({
 
       <div className="mt-8 flex flex-col items-center gap-5">
         <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-[var(--kura-border)]">
-          {qrSrc ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={qrSrc} alt="Deposit address QR" width={180} height={180} className="h-44 w-44" />
+          {address ? (
+            <QrCode value={address} label="Deposit address QR" className="h-44 w-44" />
           ) : (
             <div className="flex h-44 w-44 items-center justify-center text-xs text-[var(--kura-text-secondary)]">
               {loading ? "Loading wallet…" : "No address"}
@@ -684,6 +686,13 @@ function CryptoDepositPanel({
         <div className="w-full rounded-xl border border-[var(--kura-warning)]/30 bg-[var(--kura-warning)]/10 px-3 py-2.5 text-xs text-[var(--kura-warning)]">
           Only send USDC on the Base network. Other assets or chains may be lost permanently.
         </div>
+
+        {!paysGasInUsdc() ? (
+          <p className="w-full text-xs text-[var(--kura-text-secondary)]">
+            Network fees are paid in ETH. To send or swap from this wallet, also send a little ETH
+            on Base to the same address.
+          </p>
+        ) : null}
 
         <Button
           type="button"

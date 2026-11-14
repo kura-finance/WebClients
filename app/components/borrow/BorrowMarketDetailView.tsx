@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useState } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -31,7 +31,7 @@ import {
 import { readErc20Balance } from "@/lib/morphoEarn";
 import { submitCallsSmartOrTreasury } from "@/lib/submitTradingCalls";
 import { errMessage, formatUsd, truncateAddress } from "@/lib/formatDisplay";
-import { isPimlicoConfigured } from "@/config/env";
+import { useLoad } from "@/hooks/useLoad";
 import { PORTFOLIO_TOKENS } from "@/lib/portfolioTokens";
 import { cryptoLogoUrl } from "@/lib/assetLogos";
 import { isSignerConfigured, useSignerWallet } from "@/lib/signer";
@@ -76,102 +76,70 @@ export default function BorrowMarketDetailView({ marketId }: { marketId: string 
   } = useTradingAccount();
   const signerWallet = useSignerWallet();
 
-  const [detail, setDetail] = useState<MorphoMarketDetail | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
   const [mode, setMode] = useState<"borrow" | "repay">("borrow");
   const [collateralAmount, setCollateralAmount] = useState("");
   const [borrowAmount, setBorrowAmount] = useState("");
   const [repayAmount, setRepayAmount] = useState("");
-  const [collateralBal, setCollateralBal] = useState(0);
-  const [usdcBal, setUsdcBal] = useState(0);
-  const [positionCollateral, setPositionCollateral] = useState(0);
-  const [borrowUsd, setBorrowUsd] = useState(0);
-  const [collateralUsd, setCollateralUsd] = useState(0);
-  const [hasDebt, setHasDebt] = useState(false);
-  const [positionLoading, setPositionLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [txHash, setTxHash] = useState<string | null>(null);
   const [proposedHash, setProposedHash] = useState<string | null>(null);
 
-  const loadDetail = useCallback(
-    async (isRefresh = false) => {
-      if (isRefresh) setRefreshing(true);
-      else setLoading(true);
-      setError(null);
-      try {
-        const next = await fetchBorrowMarketDetail(marketId);
-        if (!next) {
-          setDetail(null);
-          setError("Market not found on Morpho.");
-        } else {
-          setDetail(next);
-        }
-      } catch (e) {
-        setError(errMessage(e));
-        setDetail(null);
-      } finally {
-        setLoading(false);
-        setRefreshing(false);
-      }
+  const detailQuery = useLoad({
+    key: ["borrow", "market", marketId.toLowerCase()],
+    load: async (): Promise<MorphoMarketDetail> => {
+      const next = await fetchBorrowMarketDetail(marketId);
+      if (!next) throw new Error("Market not found on Morpho.");
+      return next;
     },
-    [marketId],
-  );
+    errorMessage: "Something went wrong.",
+    describeError: errMessage,
+  });
+  // A failed load shows the error instead of an earlier copy of the market.
+  const detail = detailQuery.error ? null : (detailQuery.data ?? null);
+  const { loading, refreshing, error } = detailQuery;
 
-  const loadPosition = useCallback(async () => {
-    if (!scaAddress || !detail) {
-      setCollateralBal(0);
-      setUsdcBal(0);
-      setPositionCollateral(0);
-      setBorrowUsd(0);
-      setCollateralUsd(0);
-      setHasDebt(false);
-      return;
-    }
-    setPositionLoading(true);
-    try {
-      const mp = toMorphoMarketParams(detail);
-      const [cBal, uBal, display] = await Promise.all([
+  const positionQuery = useLoad({
+    key: ["borrow", "position", marketId.toLowerCase(), scaAddress?.toLowerCase() ?? null],
+    load: async () => {
+      const market = detail as MorphoMarketDetail;
+      const account = scaAddress as `0x${string}`;
+      const [collateralBal, usdcBal, display] = await Promise.all([
         readErc20Balance(
-          detail.collateralAsset.address as `0x${string}`,
-          scaAddress as `0x${string}`,
-          detail.collateralAsset.decimals,
+          market.collateralAsset.address as `0x${string}`,
+          account,
+          market.collateralAsset.decimals,
         ),
         readErc20Balance(
-          detail.loanAsset.address as `0x${string}`,
-          scaAddress as `0x${string}`,
-          detail.loanAsset.decimals,
+          market.loanAsset.address as `0x${string}`,
+          account,
+          market.loanAsset.decimals,
         ),
-        readMorphoUserPositionDisplay(mp, scaAddress as `0x${string}`),
+        readMorphoUserPositionDisplay(toMorphoMarketParams(market), account),
       ]);
-      setCollateralBal(cBal);
-      setUsdcBal(uBal);
-      setPositionCollateral(display.collateralFormatted);
-      setBorrowUsd(display.borrowAssetsUsd);
-      setCollateralUsd(display.collateralUsd);
-      setHasDebt(display.hasDebt);
-    } catch {
-      setCollateralBal(0);
-      setUsdcBal(0);
-      setPositionCollateral(0);
-      setBorrowUsd(0);
-      setCollateralUsd(0);
-      setHasDebt(false);
-    } finally {
-      setPositionLoading(false);
-    }
-  }, [scaAddress, detail]);
-
-  useEffect(() => {
-    void loadDetail(false);
-  }, [loadDetail]);
-
-  useEffect(() => {
-    void loadPosition();
-  }, [loadPosition]);
+      return {
+        collateralBal,
+        usdcBal,
+        positionCollateral: display.collateralFormatted,
+        borrowUsd: display.borrowAssetsUsd,
+        collateralUsd: display.collateralUsd,
+        hasDebt: display.hasDebt,
+      };
+    },
+    errorMessage: "Failed to load position",
+    enabled: Boolean(scaAddress && detail),
+  });
+  // No wallet, no market or a failed read all show an empty position.
+  const position = scaAddress && detail && !positionQuery.error ? positionQuery.data : undefined;
+  const collateralBal = position?.collateralBal ?? 0;
+  const usdcBal = position?.usdcBal ?? 0;
+  const positionCollateral = position?.positionCollateral ?? 0;
+  const borrowUsd = position?.borrowUsd ?? 0;
+  const collateralUsd = position?.collateralUsd ?? 0;
+  const hasDebt = position?.hasDebt ?? false;
+  const positionLoading = positionQuery.fetching;
+  const refreshDetail = detailQuery.refresh;
+  const loadPosition = positionQuery.refresh;
 
   const apy = detail ? borrowApy(detail) : 0;
   const maxLltv = detail ? parseMarketMaxLltv(detail.lltv) : null;
@@ -185,7 +153,6 @@ export default function BorrowMarketDetailView({ marketId }: { marketId: string 
     !!detail &&
     !!scaAddress &&
     !!signerWallet &&
-    (isTreasury || isPimlicoConfigured()) &&
     !!detail.oracleAddress &&
     !!detail.irmAddress &&
     Number(collateralAmount) > 0 &&
@@ -197,7 +164,6 @@ export default function BorrowMarketDetailView({ marketId }: { marketId: string 
     !!detail &&
     !!scaAddress &&
     !!signerWallet &&
-    (isTreasury || isPimlicoConfigured()) &&
     hasDebt &&
     (Number(repayAmount) > 0 || repayAmount === "") &&
     !busy;
@@ -244,7 +210,7 @@ export default function BorrowMarketDetailView({ marketId }: { marketId: string 
       setCollateralAmount("");
       setBorrowAmount("");
       setRepayAmount("");
-      void loadDetail(true);
+      void refreshDetail();
     } catch (e) {
       setActionError(errMessage(e));
     } finally {
@@ -359,7 +325,7 @@ export default function BorrowMarketDetailView({ marketId }: { marketId: string 
             className="rounded-full text-[var(--kura-text-secondary)]"
             disabled={refreshing}
             onClick={() => {
-              void loadDetail(true);
+              void refreshDetail();
               void loadPosition();
             }}
           >

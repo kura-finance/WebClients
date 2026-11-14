@@ -33,7 +33,6 @@ import {
   normalizeAddress,
 } from "@/lib/safeOwners";
 import { executeCallsFromSafe } from "@/lib/smartAccountSend";
-import { isPimlicoConfigured } from "@/config/env";
 import { isSignerConfigured, useSignerWallet } from "@/lib/signer";
 import { signerCopy } from "@/lib/signer/copy";
 import PrivyEoaSync from "@/components/wallet/PrivyEoaSync";
@@ -86,7 +85,13 @@ export default function TeamView() {
   const [role, setRole] = useState<OrgRole>("admin");
   const [walletAddress, setWalletAddress] = useState("");
   const [canSign, setCanSign] = useState(true);
-  const [thresholdDraft, setThresholdDraft] = useState("1");
+  const [thresholdDraft, setThresholdDraft] = useState(String(onChainThreshold));
+  // Follow the on-chain threshold whenever it changes (load, or after an update).
+  const [thresholdSyncedTo, setThresholdSyncedTo] = useState(onChainThreshold);
+  if (thresholdSyncedTo !== onChainThreshold) {
+    setThresholdSyncedTo(onChainThreshold);
+    setThresholdDraft(String(onChainThreshold));
+  }
   const [busyId, setBusyId] = useState<string | null>(null);
   const [txError, setTxError] = useState<string | null>(null);
   const [txHash, setTxHash] = useState<string | null>(null);
@@ -103,14 +108,9 @@ export default function TeamView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ownersKey, syncSafeOwners, personal.eoaAddress]);
 
-  useEffect(() => {
-    setThresholdDraft(String(onChainThreshold));
-  }, [onChainThreshold]);
-
   const canMutateSafe =
     !!treasury.scaAddress &&
     !!signerWallet &&
-    isPimlicoConfigured() &&
     isSafeOwner(owners, personal.eoaAddress);
 
   const sortedMembers = useMemo(() => {
@@ -128,9 +128,6 @@ export default function TeamView() {
     async (label: string, calls: Parameters<typeof executeCallsFromSafe>[0]["calls"]) => {
       if (!treasury.scaAddress) throw new Error("Treasury Safe not found. Create one under Treasury.");
       if (!signerWallet) throw new Error(signerCopy.walletUnavailable);
-      if (!isPimlicoConfigured()) {
-        throw new Error("Pimlico is not configured. Set NEXT_PUBLIC_PIMLICO_API_KEY.");
-      }
       if (!isSafeOwner(owners, personal.eoaAddress)) {
         throw new Error("Your EOA is not a Treasury Safe owner, so you cannot change signers.");
       }
@@ -471,9 +468,7 @@ export default function TeamView() {
       ) : null}
       {!canMutateSafe && treasury.scaAddress ? (
         <div className="mb-4 rounded-xl border border-[var(--kura-border)] bg-[var(--kura-surface)] px-4 py-3 text-xs text-[var(--kura-text-secondary)]">
-          {!isPimlicoConfigured()
-            ? "Pimlico is not configured — signing changes are view-only."
-            : !isSafeOwner(owners, personal.eoaAddress)
+          {!isSafeOwner(owners, personal.eoaAddress)
               ? `Your ${signerCopy.eoa} is not an on-chain Safe owner, so you can view but not change signers.`
               : `${signerCopy.connect} to manage Safe signers.`}
         </div>

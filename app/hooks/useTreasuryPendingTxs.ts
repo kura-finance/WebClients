@@ -1,45 +1,25 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
 import {
   fetchPendingMultisigTxs,
   type SafeMultisigTx,
 } from "@/lib/safeTxService";
+import { useLoad } from "@/hooks/useLoad";
+
+const NO_TXS: SafeMultisigTx[] = [];
 
 export function useTreasuryPendingTxs(safeAddress: string | null) {
-  const [txs, setTxs] = useState<SafeMultisigTx[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const valid = !!safeAddress && /^0x[a-fA-F0-9]{40}$/i.test(safeAddress);
 
-  const refresh = useCallback(async () => {
-    if (!safeAddress || !/^0x[a-fA-F0-9]{40}$/i.test(safeAddress)) {
-      setTxs([]);
-      setError(null);
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    setError(null);
-    try {
-      const next = await fetchPendingMultisigTxs(safeAddress);
-      setTxs(next);
-    } catch (e) {
-      setTxs([]);
-      setError(e instanceof Error ? e.message : "Failed to load pending Safe transactions");
-    } finally {
-      setLoading(false);
-    }
-  }, [safeAddress]);
+  const { data, fetching, error, refresh } = useLoad({
+    key: ["treasury", "pending-txs", safeAddress?.toLowerCase() ?? null],
+    load: () => fetchPendingMultisigTxs(safeAddress as string),
+    errorMessage: "Failed to load pending Safe transactions",
+    enabled: valid,
+    refreshMs: 45_000,
+  });
 
-  useEffect(() => {
-    void refresh();
-  }, [refresh]);
-
-  useEffect(() => {
-    if (!safeAddress) return;
-    const id = setInterval(() => void refresh(), 45_000);
-    return () => clearInterval(id);
-  }, [refresh, safeAddress]);
-
-  return { txs, loading, error, refresh };
+  // A failed load shows an empty queue rather than a stale one: a transaction
+  // that looks pending may already have been executed.
+  return { txs: valid && !error ? (data ?? NO_TXS) : NO_TXS, loading: fetching, error, refresh };
 }

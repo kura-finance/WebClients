@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { useHomeWallet } from "@/hooks/useHomeWallet";
 import { useAppStore } from "@/store/useAppStore";
-import { isPimlicoConfigured } from "@/config/env";
+import { paysGasInUsdc } from "@/config/env";
 import { features } from "@/config/features";
 import { isSignerConfigured, useSignerWallet, type SignerWallet } from "@/lib/signer";
 import { signerCopy } from "@/lib/signer/copy";
@@ -24,18 +24,21 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DashboardPage } from "@/components/dashboard/PageShell";
 import { ApiError } from "@/lib/errorHandler";
-import { executeLiFiBridgeFromSafe, sendUsdcFromSafe } from "@/lib/smartAccountSend";
+import {
+  ETH_GAS_NOTICE,
+  executeLiFiBridgeFromSafe,
+  sendUsdcFromSafe,
+} from "@/lib/smartAccountSend";
 import {
   BASE_CHAIN,
   BASE_CHAIN_ID,
   SEND_CHAINS,
-  fetchBridgeQuote,
   formatBridgeFeeTotal,
   formatBridgeReceive,
   formatBridgeTime,
   type BridgeChain,
-  type LiFiBridgeQuote,
 } from "@/lib/lifiBridge";
+import { useBridgeQuote } from "@/hooks/useBridgeQuote";
 import {
   createExternalAccount,
   formatDepositFeeLabel,
@@ -212,9 +215,6 @@ function CryptoSendPanel({
   const [error, setError] = useState<string | null>(null);
   const [txHash, setTxHash] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
-  const [quote, setQuote] = useState<LiFiBridgeQuote | null>(null);
-  const [quoteError, setQuoteError] = useState<string | null>(null);
-  const [isFetchingQuote, setIsFetchingQuote] = useState(false);
   const [countdown, setCountdown] = useState(QUOTE_REFRESH_SEC);
 
   const isBridge = chain.id !== BASE_CHAIN_ID;
@@ -227,58 +227,38 @@ function CryptoSendPanel({
     numericAmount > 0 &&
     numericAmount <= balance;
 
+  const {
+    quote,
+    quoteError,
+    isQuoting: isFetchingQuote,
+    refresh: loadQuote,
+  } = useBridgeQuote(
+    canQuote && scaAddress
+      ? {
+          fromChainId: BASE_CHAIN_ID,
+          toChainId: chain.id,
+          fromAmountWei: String(Math.round(numericAmount * 1_000_000)),
+          fromAddress: scaAddress,
+          toAddress: to.trim(),
+        }
+      : null,
+  );
+
   const canSend =
     !!scaAddress &&
     !!signerWallet &&
-    isPimlicoConfigured() &&
     isValidAddress &&
     numericAmount > 0 &&
     numericAmount <= balance &&
     !isSending &&
     (!isBridge || (!!quote && !quoteError && !isFetchingQuote));
 
-  const loadQuote = useCallback(async () => {
-    if (!canQuote || !scaAddress) {
-      setQuote(null);
-      setQuoteError(null);
-      return;
-    }
-    setIsFetchingQuote(true);
-    setQuoteError(null);
-    try {
-      const q = await fetchBridgeQuote({
-        fromChainId: BASE_CHAIN_ID,
-        toChainId: chain.id,
-        fromAmountWei: String(Math.round(numericAmount * 1_000_000)),
-        fromAddress: scaAddress,
-        toAddress: to.trim(),
-      });
-      setQuote(q);
-      setCountdown(QUOTE_REFRESH_SEC);
-    } catch (e) {
-      setQuote(null);
-      setQuoteError(errMessage(e));
-    } finally {
-      setIsFetchingQuote(false);
-    }
-  }, [canQuote, scaAddress, chain.id, numericAmount, to]);
-
-  useEffect(() => {
-    if (!isBridge) {
-      setQuote(null);
-      setQuoteError(null);
-      return;
-    }
-    if (!canQuote) {
-      setQuote(null);
-      setQuoteError(null);
-      return;
-    }
-    const debounce = window.setTimeout(() => {
-      void loadQuote();
-    }, 400);
-    return () => window.clearTimeout(debounce);
-  }, [isBridge, canQuote, loadQuote]);
+  // Every new quote restarts the countdown to the next automatic re-quote.
+  const [countdownQuote, setCountdownQuote] = useState(quote);
+  if (countdownQuote !== quote) {
+    setCountdownQuote(quote);
+    setCountdown(QUOTE_REFRESH_SEC);
+  }
 
   useEffect(() => {
     if (!isBridge || !quote || !canQuote) return;
@@ -303,10 +283,6 @@ function CryptoSendPanel({
     }
     if (!signerWallet) {
       setError(signerCopy.walletNotReady);
-      return;
-    }
-    if (!isPimlicoConfigured()) {
-      setError("Sending is not configured (missing Pimlico API key).");
       return;
     }
     if (!isValidAddress) {
@@ -345,7 +321,6 @@ function CryptoSendPanel({
           });
       setTxHash(hash);
       setAmount("");
-      setQuote(null);
       onSent();
     } catch (e) {
       setError(errMessage(e));
@@ -491,10 +466,9 @@ function CryptoSendPanel({
           </div>
         ) : null}
 
-        {!isPimlicoConfigured() ? (
-          <div className="rounded-xl border border-[var(--kura-warning-border)] bg-[var(--kura-warning-bg)] px-3 py-2.5 text-xs text-[var(--kura-warning-fg)]">
-            Set <code className="font-mono">NEXT_PUBLIC_PIMLICO_API_KEY</code> to enable on-chain
-            sends from web.
+        {!paysGasInUsdc() ? (
+          <div className="rounded-xl border border-[var(--kura-border)] bg-[var(--kura-surface)] px-3 py-2.5 text-xs text-[var(--kura-text-secondary)]">
+            {ETH_GAS_NOTICE}
           </div>
         ) : null}
 
@@ -595,7 +569,6 @@ function BankPayoutPanel({
     !!scaAddress &&
     !!signerWallet &&
     !!payoutAddress?.depositAddress &&
-    isPimlicoConfigured() &&
     numericAmount > 0 &&
     numericAmount <= balance &&
     !isSending;
@@ -624,13 +597,18 @@ function BankPayoutPanel({
     }
   }, [selectedAccountId]);
 
+  // Bank payouts (Bridge) keep their hand-written loaders: the flow creates
+  // server-side payout addresses and cannot be exercised without a backend, so
+  // it was left as it is rather than rewritten untested. See TODO.md.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     if (!selectedAccount || !selectedOption || !scaAddress || !ready) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- see the note above
       setPayoutAddress(null);
       return;
     }
@@ -671,12 +649,6 @@ function BankPayoutPanel({
     };
   }, [selectedAccount, selectedOption, scaAddress, ready]);
 
-  useEffect(() => {
-    if (railsForAccount.length && !selectedRail) {
-      setSelectedRail(String(railsForAccount[0].destinationRail));
-    }
-  }, [railsForAccount, selectedRail]);
-
   const saveBank = async () => {
     setSavingBank(true);
     setError(null);
@@ -711,10 +683,6 @@ function BankPayoutPanel({
     if (!scaAddress || !signerWallet || !payoutAddress?.depositAddress) return;
     if (!(numericAmount > 0) || numericAmount > balance) {
       setError("Enter a valid amount within your balance.");
-      return;
-    }
-    if (!isPimlicoConfigured()) {
-      setError("Sending is not configured (missing Pimlico API key).");
       return;
     }
 
@@ -983,10 +951,9 @@ function BankPayoutPanel({
             </div>
           ) : null}
 
-          {!isPimlicoConfigured() ? (
-            <div className="rounded-xl border border-[var(--kura-warning-border)] bg-[var(--kura-warning-bg)] px-3 py-2.5 text-xs text-[var(--kura-warning-fg)]">
-              Set <code className="font-mono">NEXT_PUBLIC_PIMLICO_API_KEY</code> to send USDC from
-              web.
+          {!paysGasInUsdc() ? (
+            <div className="rounded-xl border border-[var(--kura-border)] bg-[var(--kura-surface)] px-3 py-2.5 text-xs text-[var(--kura-text-secondary)]">
+              {ETH_GAS_NOTICE}
             </div>
           ) : null}
 

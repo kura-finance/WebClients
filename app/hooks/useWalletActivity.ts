@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useState } from "react";
+import { useLoad } from "@/hooks/useLoad";
 import {
   listDeposits,
   listPayoutAddresses,
@@ -11,6 +12,15 @@ import {
   type TransferResult,
 } from "@/lib/bridgeRampApi";
 import { hasBackendUrl } from "@/config/env";
+import { getAddress } from "viem";
+import { getBaseRpcUrls, HOME_STABLECOINS } from "@/lib/baseChain";
+import { PORTFOLIO_TOKENS } from "@/lib/portfolioTokens";
+import { SAFE_TX_SERVICE_URL } from "@/lib/safeTxService";
+import {
+  WalletTransferHistory,
+  type TransferLogRow,
+  type TransferLogToken,
+} from "@/lib/chain/walletTransfers";
 
 export type ActivitySource = "chain" | "fiat_deposit" | "crypto_deposit" | "fiat_withdraw";
 export type ActivityDirection = "in" | "out" | "self";
@@ -29,7 +39,8 @@ export interface WalletActivity {
   statusLabel?: string;
 }
 
-interface BlockscoutTransfer {
+/** One ERC-20 transfer, in the Etherscan-style shape `mapChainTransfer` was written for. */
+interface ChainTransfer {
   hash: string;
   timeStamp: string;
   from: string;
@@ -40,7 +51,6 @@ interface BlockscoutTransfer {
   contractAddress: string;
 }
 
-const BLOCKSCOUT_API = "https://base.blockscout.com/api";
 /** History detail: keep loading month segments until at least this many rows (or exhausted). */
 export const HISTORY_MIN_INITIAL = 30;
 const HISTORY_MAX_MONTHS = 36;
@@ -74,7 +84,7 @@ function statusLabel(state: string): string {
   return map[state] ?? state.replace(/_/g, " ");
 }
 
-function mapChainTransfer(tx: BlockscoutTransfer, address: string): WalletActivity {
+function mapChainTransfer(tx: ChainTransfer, address: string): WalletActivity {
   const me = address.toLowerCase();
   const from = (tx.from ?? "").toLowerCase();
   const to = (tx.to ?? "").toLowerCase();
@@ -105,33 +115,73 @@ function mapChainTransfer(tx: BlockscoutTransfer, address: string): WalletActivi
   };
 }
 
-async function fetchChainTokenTxPage(
-  address: string,
-  page: number,
-  offset: number,
-): Promise<WalletActivity[]> {
-  const url = new URL(BLOCKSCOUT_API);
-  url.searchParams.set("module", "account");
-  url.searchParams.set("action", "tokentx");
-  url.searchParams.set("address", address);
-  url.searchParams.set("page", String(page));
-  url.searchParams.set("offset", String(offset));
-  url.searchParams.set("sort", "desc");
+/**
+ * Tokens the RPC log scan looks for: everything the app shows a balance for.
+ * (The Safe Transaction Service, which serves most of the history, lists every token.)
+ */
+const HISTORY_TOKENS: TransferLogToken[] = (() => {
+  const byAddress = new Map<string, TransferLogToken>();
+  for (const t of HOME_STABLECOINS) {
+    byAddress.set(t.address.toLowerCase(), {
+      address: t.address,
+      symbol: t.symbol,
+      name: t.name,
+      decimals: t.decimals,
+    });
+  }
+  for (const t of PORTFOLIO_TOKENS) {
+    if (!t.baseAddress || t.trackBalance === false) continue;
+    const key = t.baseAddress.toLowerCase();
+    if (!byAddress.has(key)) {
+      byAddress.set(key, {
+        address: t.baseAddress,
+        symbol: t.symbol,
+        name: t.name,
+        decimals: t.decimals,
+      });
+    }
+  }
+  return [...byAddress.values()];
+})();
 
-  const res = await fetch(url.toString());
-  if (!res.ok) return [];
-  const json = (await res.json()) as {
-    status?: string;
-    message?: string;
-    result?: BlockscoutTransfer[] | string;
-  };
-  if (!Array.isArray(json.result)) return [];
-  return json.result.map((tx) => mapChainTransfer(tx, address));
+function checksum(address: string): string {
+  try {
+    return getAddress(address);
+  } catch {
+    return address;
+  }
 }
 
-/** Home / treasury preview — recent chain page. */
+/** On-chain history source — see lib/chain/walletTransfers.ts for what it covers. */
+function createTransferHistory(address: string): WalletTransferHistory {
+  return new WalletTransferHistory({
+    address: checksum(address),
+    tokens: HISTORY_TOKENS,
+    rpcUrls: getBaseRpcUrls(),
+    safeServiceUrl: SAFE_TX_SERVICE_URL,
+  });
+}
+
+function activityFromRow(row: TransferLogRow, address: string): WalletActivity {
+  return mapChainTransfer(
+    {
+      hash: row.hash,
+      timeStamp: String(row.timestamp),
+      from: checksum(row.from),
+      to: checksum(row.to),
+      value: row.value,
+      tokenSymbol: row.token.symbol,
+      tokenDecimal: String(row.token.decimals),
+      contractAddress: row.token.address,
+    },
+    address,
+  );
+}
+
+/** Home / treasury preview — the most recent transfers. */
 async function fetchChainTokenTxs(address: string): Promise<WalletActivity[]> {
-  return fetchChainTokenTxPage(address, 1, 40);
+  const page = await createTransferHistory(address).nextPage(40);
+  return page.rows.map((row) => activityFromRow(row, address));
 }
 
 function depositToActivity(d: DepositResult): WalletActivity {
@@ -291,35 +341,43 @@ function inMonth(iso: string, startMs: number, endMs: number): boolean {
 }
 
 /**
- * Cursor that pages Blockscout newest→oldest so month windows can filter locally.
+ * Pages on-chain history newest→oldest so month windows can filter locally.
  */
 class ChainTxCursor {
   private address: string;
+  private history: WalletTransferHistory;
   private buffer: WalletActivity[] = [];
-  private nextPage = 1;
+  /** History is complete back to this time; null until the source says. */
+  private coveredBackToMs: number | null = null;
   exhausted = false;
 
   constructor(address: string) {
     this.address = address;
+    this.history = createTransferHistory(address);
   }
 
+  /** Load pages until history is complete back to `oldestNeededMs`, or runs out. */
   async ensureThrough(oldestNeededMs: number): Promise<void> {
     while (!this.exhausted) {
-      if (this.buffer.length > 0) {
-        const oldest = Math.min(...this.buffer.map((r) => new Date(r.timestamp).getTime()));
-        if (oldest < oldestNeededMs) return;
+      if (this.coveredBackToMs !== null && this.coveredBackToMs < oldestNeededMs) return;
+
+      let page;
+      try {
+        page = await this.history.nextPage(CHAIN_PAGE_SIZE);
+      } catch (error) {
+        // Provider messages mean nothing to the user; keep the detail for debugging.
+        console.warn("[WalletActivity] Failed to load transfers", error);
+        throw new Error("Could not load on-chain activity. Try again in a moment.");
       }
-      const page = await fetchChainTokenTxPage(this.address, this.nextPage, CHAIN_PAGE_SIZE);
-      this.nextPage += 1;
-      if (page.length === 0) {
-        this.exhausted = true;
-        return;
-      }
-      this.buffer = dedupeById([...this.buffer, ...page]);
-      if (page.length < CHAIN_PAGE_SIZE) {
-        this.exhausted = true;
-        return;
-      }
+
+      this.buffer = dedupeById([
+        ...this.buffer,
+        ...page.rows.map((row) => activityFromRow(row, this.address)),
+      ]);
+      // A page can be empty while older blocks remain, so go by what the source
+      // says it has covered rather than by the rows it returned.
+      if (page.coveredBackToMs !== null) this.coveredBackToMs = page.coveredBackToMs;
+      if (!page.hasMore) this.exhausted = true;
     }
   }
 
@@ -328,45 +386,127 @@ class ChainTxCursor {
   }
 }
 
+const NO_ACTIVITY: WalletActivity[] = [];
+
 export function useWalletActivity(smartAddress: string | null) {
-  const [activities, setActivities] = useState<WalletActivity[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const refresh = useCallback(async () => {
-    if (!smartAddress && !hasBackendUrl()) {
-      setActivities([]);
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
-    try {
+  const { data, fetching, error, refresh } = useLoad({
+    key: ["wallet", "activity", smartAddress?.toLowerCase() ?? null],
+    load: async () => {
       const chainPromise = smartAddress
         ? fetchChainTokenTxs(smartAddress).catch(() => [] as WalletActivity[])
         : Promise.resolve([] as WalletActivity[]);
       const bridgePromise = fetchBridgeActivities().catch(() => [] as WalletActivity[]);
       const [chain, bridge] = await Promise.all([chainPromise, bridgePromise]);
-      setActivities(mergeActivities(bridge, chain));
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load activity");
-    } finally {
-      setLoading(false);
+      return mergeActivities(bridge, chain);
+    },
+    errorMessage: "Failed to load activity",
+    enabled: Boolean(smartAddress) || hasBackendUrl(),
+    refreshMs: 45_000,
+  });
+
+  return { activities: data ?? NO_ACTIVITY, loading: fetching, error, refresh };
+}
+
+/** Sources of one history load. The chain cursor only caches pages it has read. */
+interface HistorySession {
+  bridge: WalletActivity[];
+  chain: ChainTxCursor | null;
+}
+
+/** Rows loaded so far, and where the next page continues. */
+interface HistoryPage {
+  activities: WalletActivity[];
+  monthsLoaded: number;
+  emptyStreak: number;
+  hasMore: boolean;
+}
+
+interface HistoryLoad extends HistoryPage {
+  /** Distinguishes one initial load from the next, so later pages never mix. */
+  loadId: number;
+  session: HistorySession;
+}
+
+let nextHistoryLoadId = 0;
+
+async function loadMonthSegment(
+  session: HistorySession,
+  monthsAgo: number,
+): Promise<WalletActivity[]> {
+  const { startMs, endMs } = monthWindow(monthsAgo);
+  const bridgeMonth = session.bridge.filter((r) => inMonth(r.timestamp, startMs, endMs));
+
+  let chainMonth: WalletActivity[] = [];
+  if (session.chain) {
+    await session.chain.ensureThrough(startMs);
+    chainMonth = session.chain.inRange(startMs, endMs);
+  }
+
+  return mergeActivities(bridgeMonth, chainMonth);
+}
+
+const EMPTY_HISTORY: HistoryPage = { activities: [], monthsLoaded: 0, emptyStreak: 0, hasMore: true };
+
+/**
+ * Fetch month segments after `from`, until `enough` says so or the history runs
+ * out. Returns a new page; `from` is left as it was.
+ */
+async function extendHistory(
+  session: HistorySession,
+  from: HistoryPage,
+  enough: (rows: WalletActivity[], addedRows: boolean) => boolean,
+): Promise<HistoryPage> {
+  let local = from.activities;
+  let monthsAgo = from.monthsLoaded;
+  let emptyStreak = from.emptyStreak;
+  let more = true;
+  let addedRows = false;
+
+  while (monthsAgo < HISTORY_MAX_MONTHS && !enough(local, addedRows)) {
+    const batch = await loadMonthSegment(session, monthsAgo);
+    monthsAgo += 1;
+
+    if (batch.length === 0) {
+      emptyStreak += 1;
+      const chainDone = !session.chain || session.chain.exhausted;
+      if ((emptyStreak >= 3 && chainDone) || emptyStreak >= 6) {
+        more = false;
+        break;
+      }
+      continue;
     }
-  }, [smartAddress]);
 
-  useEffect(() => {
-    void refresh();
-  }, [refresh]);
+    emptyStreak = 0;
+    addedRows = true;
+    local = dedupeById(
+      [...local, ...batch].sort(
+        (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
+      ),
+    );
+  }
 
-  useEffect(() => {
-    const id = setInterval(() => {
-      void refresh();
-    }, 45_000);
-    return () => clearInterval(id);
-  }, [refresh]);
+  if (monthsAgo >= HISTORY_MAX_MONTHS) more = false;
 
-  return { activities, loading, error, refresh };
+  return {
+    activities: local,
+    monthsLoaded: monthsAgo,
+    emptyStreak,
+    hasMore: more && monthsAgo < HISTORY_MAX_MONTHS,
+  };
+}
+
+async function loadInitialHistory(smartAddress: string | null): Promise<HistoryLoad> {
+  const session: HistorySession = {
+    bridge: await fetchBridgeActivities().catch(() => [] as WalletActivity[]),
+    chain: smartAddress ? new ChainTxCursor(smartAddress) : null,
+  };
+  const page = await extendHistory(
+    session,
+    EMPTY_HISTORY,
+    (rows) => rows.length >= HISTORY_MIN_INITIAL,
+  );
+  nextHistoryLoadId += 1;
+  return { ...page, session, loadId: nextHistoryLoadId };
 }
 
 /**
@@ -374,150 +514,48 @@ export function useWalletActivity(smartAddress: string | null) {
  * Initial load keeps fetching months until ≥ HISTORY_MIN_INITIAL rows (or exhausted = load all).
  */
 export function useWalletActivityHistory(smartAddress: string | null) {
-  const [activities, setActivities] = useState<WalletActivity[]>([]);
-  const [loading, setLoading] = useState(false);
+  const enabled = Boolean(smartAddress) || hasBackendUrl();
+
+  const initial = useLoad({
+    key: ["wallet", "activity-history", smartAddress?.toLowerCase() ?? null],
+    load: () => loadInitialHistory(smartAddress),
+    errorMessage: "Failed to load activity",
+    enabled,
+  });
+
+  // Later pages, valid only for the initial load they continue (`loadId`): a
+  // refresh or another address starts over without an effect to reset this.
+  const [extra, setExtra] = useState<(HistoryPage & { loadId: number }) | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [hasMore, setHasMore] = useState(true);
-  const [monthsLoaded, setMonthsLoaded] = useState(0);
+  const [moreError, setMoreError] = useState<{ loadId: number; message: string } | null>(null);
 
-  const bridgeRef = useRef<WalletActivity[] | null>(null);
-  const chainRef = useRef<ChainTxCursor | null>(null);
-  const nextMonthRef = useRef(0);
-  const emptyStreakRef = useRef(0);
+  const base = enabled ? initial.data : undefined;
+  const page: HistoryPage | undefined = extra && base && extra.loadId === base.loadId ? extra : base;
 
-  const loadMonthSegment = useCallback(
-    async (monthsAgo: number): Promise<WalletActivity[]> => {
-      const { startMs, endMs } = monthWindow(monthsAgo);
-      const bridge = bridgeRef.current ?? [];
-      const bridgeMonth = bridge.filter((r) => inMonth(r.timestamp, startMs, endMs));
-
-      let chainMonth: WalletActivity[] = [];
-      if (smartAddress) {
-        if (!chainRef.current) chainRef.current = new ChainTxCursor(smartAddress);
-        await chainRef.current.ensureThrough(startMs);
-        chainMonth = chainRef.current.inRange(startMs, endMs);
-      }
-
-      return mergeActivities(bridgeMonth, chainMonth);
-    },
-    [smartAddress],
-  );
-
-  const refresh = useCallback(async () => {
-    if (!smartAddress && !hasBackendUrl()) {
-      setActivities([]);
-      setHasMore(false);
-      setMonthsLoaded(0);
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
-    nextMonthRef.current = 0;
-    emptyStreakRef.current = 0;
-    chainRef.current = smartAddress ? new ChainTxCursor(smartAddress) : null;
-
-    try {
-      bridgeRef.current = await fetchBridgeActivities().catch(() => [] as WalletActivity[]);
-
-      let local: WalletActivity[] = [];
-      let monthsAgo = 0;
-      let emptyStreak = 0;
-      let more = true;
-
-      while (monthsAgo < HISTORY_MAX_MONTHS && local.length < HISTORY_MIN_INITIAL) {
-        const batch = await loadMonthSegment(monthsAgo);
-        monthsAgo += 1;
-
-        if (batch.length === 0) {
-          emptyStreak += 1;
-          const chainDone = !smartAddress || chainRef.current?.exhausted === true;
-          if ((emptyStreak >= 3 && chainDone) || emptyStreak >= 6) {
-            more = false;
-            break;
-          }
-          continue;
-        }
-
-        emptyStreak = 0;
-        local = dedupeById(
-          [...local, ...batch].sort(
-            (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
-          ),
-        );
-      }
-
-      if (monthsAgo >= HISTORY_MAX_MONTHS) more = false;
-
-      nextMonthRef.current = monthsAgo;
-      emptyStreakRef.current = emptyStreak;
-      setActivities(local);
-      setMonthsLoaded(monthsAgo);
-      setHasMore(more && monthsAgo < HISTORY_MAX_MONTHS);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load activity");
-      setHasMore(false);
-    } finally {
-      setLoading(false);
-    }
-  }, [loadMonthSegment, smartAddress]);
+  const activities = page?.activities ?? NO_ACTIVITY;
+  const monthsLoaded = page?.monthsLoaded ?? 0;
+  // Nothing more to offer when history is off, or the initial load failed.
+  const hasMore = page ? page.hasMore : enabled && !initial.error;
+  const loading = initial.fetching;
+  const error = initial.error ?? (moreError && moreError.loadId === base?.loadId ? moreError.message : null);
+  const refresh = initial.refresh;
 
   const loadMore = useCallback(async () => {
-    if (!hasMore || loadingMore || loading) return;
+    if (!base || !page || !page.hasMore || loadingMore || loading) return;
     setLoadingMore(true);
-    setError(null);
+    setMoreError(null);
     try {
-      if (!bridgeRef.current) {
-        bridgeRef.current = await fetchBridgeActivities().catch(() => [] as WalletActivity[]);
-      }
-
-      let local = [...activities];
-      let monthsAgo = nextMonthRef.current;
-      let emptyStreak = emptyStreakRef.current;
-      let more = true;
-      let loadedOneNonEmpty = false;
-
-      while (monthsAgo < HISTORY_MAX_MONTHS && !loadedOneNonEmpty) {
-        const batch = await loadMonthSegment(monthsAgo);
-        monthsAgo += 1;
-
-        if (batch.length === 0) {
-          emptyStreak += 1;
-          const chainDone = !smartAddress || chainRef.current?.exhausted === true;
-          if ((emptyStreak >= 3 && chainDone) || emptyStreak >= 6) {
-            more = false;
-            break;
-          }
-          continue;
-        }
-
-        emptyStreak = 0;
-        loadedOneNonEmpty = true;
-        local = dedupeById(
-          [...local, ...batch].sort(
-            (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
-          ),
-        );
-      }
-
-      if (monthsAgo >= HISTORY_MAX_MONTHS) more = false;
-
-      nextMonthRef.current = monthsAgo;
-      emptyStreakRef.current = emptyStreak;
-      setActivities(local);
-      setMonthsLoaded(monthsAgo);
-      setHasMore(more && monthsAgo < HISTORY_MAX_MONTHS);
+      const next = await extendHistory(base.session, page, (_rows, addedRows) => addedRows);
+      setExtra({ ...next, loadId: base.loadId });
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load more");
+      setMoreError({
+        loadId: base.loadId,
+        message: e instanceof Error ? e.message : "Failed to load more",
+      });
     } finally {
       setLoadingMore(false);
     }
-  }, [activities, hasMore, loadMonthSegment, loading, loadingMore, smartAddress]);
-
-  useEffect(() => {
-    void refresh();
-  }, [refresh]);
+  }, [base, page, loadingMore, loading]);
 
   return {
     activities,

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { env } from './app/config/env';
+import { env, hasBackendUrl } from './app/config/env';
 
 function resolvePublicOrigin(request: NextRequest): string {
   const forwardedHost = request.headers.get('x-forwarded-host')?.split(',')[0]?.trim();
@@ -30,17 +30,29 @@ export function proxy(request: NextRequest) {
   // Prefer public Host / X-Forwarded-* over Cloud Run's bind address (0.0.0.0:8080).
   const requestOrigin = resolvePublicOrigin(request);
 
-  // Define the app domain and API domain
   const appDomain = env.appUrl || requestOrigin;
-  const apiDomain = env.apiUrl;
+
+  // Community edition (no backend): no Privy, Plaid, Reown or Kura API, so their
+  // hosts stay out of the policy. They are only allowed in backend mode.
+  const backend = hasBackendUrl();
+  const backendOrigin = (() => {
+    try {
+      return backend ? new URL(env.backendUrl).origin : '';
+    } catch {
+      return '';
+    }
+  })();
 
   // Privy auth, WalletConnect verify, and Turnstile CAPTCHA (see docs.privy.io CSP guide)
-  const privyFrameSources = [
-    'https://auth.privy.io',
-    'https://verify.walletconnect.com',
-    'https://verify.walletconnect.org',
-    'https://challenges.cloudflare.com',
-  ].join(' ');
+  const privyFrameSources = backend
+    ? [
+        'https://auth.privy.io',
+        'https://verify.walletconnect.com',
+        'https://verify.walletconnect.org',
+        'https://challenges.cloudflare.com',
+      ].join(' ')
+    : '';
+  const plaidSources = backend ? ['https://cdn.plaid.com', 'https://*.plaid.com'] : [];
 
   // TradingView free widgets (script → iframe). No API key required.
   // Hosts: s3 (loader), s. / www.tradingview-widget.com (embed iframe).
@@ -61,46 +73,46 @@ export function proxy(request: NextRequest) {
     "'self'",
     requestOrigin,
     appDomain,
-    apiDomain,
-    'https://cdn.plaid.com',
-    'https://*.plaid.com',
+    ...(backend
+      ? [
+          // Kura backend (NEXT_PUBLIC_API_URL, plus the rewrite target itself)
+          env.apiUrl,
+          backendOrigin,
+          ...plaidSources,
+          // Privy
+          'https://auth.privy.io',
+          'https://*.privy.io',
+          'https://*.rpc.privy.systems',
+          'wss://*.rpc.privy.systems',
+          // Reown / WalletConnect (TrackFi wallet tracking)
+          'wss://relay.reown.com',
+          'wss://*.reown.com',
+          'wss://relay.walletconnect.com',
+          'wss://relay.walletconnect.org',
+          'wss://www.walletlink.org',
+          'https://api.reown.org',
+          'https://api.web3modal.org',
+          'https://explorer-api.walletconnect.com',
+          'https://*.walletconnect.org',
+          'https://*.walletconnect.com',
+          // Coinbase Wallet SDK (bundled with Privy)
+          'https://cca-lite.coinbase.com',
+          'https://static.cloudflareinsights.com', // Cloudflare Insights
+        ]
+      : []),
     'https://*.coingecko.com',
     'https://api.coingecko.com',
-    // Privy
-    'https://auth.privy.io',
-    'https://*.privy.io',
-    'https://*.rpc.privy.systems',
-    'wss://*.rpc.privy.systems',
-    // Reown / WalletConnect
-    'wss://relay.reown.com',
-    'wss://*.reown.com',
-    'wss://relay.walletconnect.com',
-    'wss://relay.walletconnect.org',
-    'wss://www.walletlink.org',
-    'https://api.reown.org',
-    'https://api.web3modal.org',
-    'https://explorer-api.walletconnect.com',
-    'https://*.walletconnect.org',
-    'https://*.walletconnect.com',
-    // Coinbase Wallet SDK (bundled with Privy)
-    'https://cca-lite.coinbase.com',
-    'https://static.cloudflareinsights.com', // Cloudflare Insights
-    'https://app.kura-finance.com', // Explicitly add app domain
-    'https://api.kura-finance.com', // Explicitly add API domain
-    // Base RPC + Blockscout (Home / Portfolio balances, Safe owners, tx history)
+    // Base RPC (Home / Portfolio balances, Safe owners, recent transfer logs)
     'https://mainnet.base.org',
     'https://*.base.org',
-    'https://base.llamarpc.com',
-    'https://*.llamarpc.com',
-    'https://1rpc.io',
-    'https://base.blockscout.com',
-    'https://*.blockscout.com',
+    'https://base-rpc.publicnode.com',
+    'https://base.drpc.org',
     'https://*.g.alchemy.com',
     'https://api.morpho.org',
     'https://li.quest',
     'https://*.li.quest',
-    // Safe Transaction Service (Treasury Approvals / import owned Safes)
-    'https://safe-transaction-base.safe.global',
+    // Safe Transaction Service (transfer history, Treasury Approvals, import owned Safes)
+    'https://api.safe.global',
     'https://*.safe.global',
     'https://s3.tradingview.com',
     'https://s.tradingview.com',
@@ -129,15 +141,17 @@ export function proxy(request: NextRequest) {
   const scriptSources = [
     "'self'",
     "'unsafe-inline'",
-    "'wasm-unsafe-eval'", // libsodium-wasm / hash-wasm crypto
+    "'wasm-unsafe-eval'", // libsodium-wasm crypto
     ...(env.isDevelopment ? ["'unsafe-eval'"] : []), // Allow eval() for React dev mode debugging
     requestOrigin,
     appDomain,
-    'https://app.kura-finance.com',
-    'https://cdn.plaid.com',
-    'https://*.plaid.com',
-    'https://challenges.cloudflare.com',
-    'https://static.cloudflareinsights.com', // Cloudflare Insights
+    ...(backend
+      ? [
+          ...plaidSources,
+          'https://challenges.cloudflare.com', // Turnstile (Privy login)
+          'https://static.cloudflareinsights.com', // Cloudflare Insights
+        ]
+      : []),
     'https://s3.tradingview.com',
     'https://s.tradingview.com',
     'https://static.tradingview.com',
@@ -155,7 +169,7 @@ export function proxy(request: NextRequest) {
     img-src 'self' data: https: blob:;
     font-src 'self' data: https: https://fonts.reown.com;
     style-src 'self' 'unsafe-inline';
-    frame-src 'self' https://cdn.plaid.com https://*.plaid.com ${tradingViewFrameSources} ${privyFrameSources};
+    frame-src 'self' ${plaidSources.join(' ')} ${tradingViewFrameSources} ${privyFrameSources};
     child-src 'self' ${tradingViewFrameSources} ${privyFrameSources};
     worker-src 'self' blob:;
     frame-ancestors 'self';
