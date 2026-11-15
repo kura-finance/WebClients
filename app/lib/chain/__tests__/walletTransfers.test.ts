@@ -42,6 +42,8 @@ interface World {
   indexed: number[] | null;
   deployed: boolean;
   usdcBalance: bigint;
+  /** Serve balances at past blocks (from `transfers`); otherwise they fail, as without archive state. */
+  archive?: boolean;
 }
 
 function world(w: World) {
@@ -92,7 +94,18 @@ function world(w: World) {
     }
     if (method === "eth_call") {
       requests.push({ kind: "rpc", method });
-      return rpc(hex(w.usdcBalance));
+      const at = params[1] as string;
+      if (at === "latest") return rpc(hex(w.usdcBalance));
+      if (!w.archive) return reply({ jsonrpc: "2.0", id: 1, error: { message: "missing trie node" } });
+      const block = Number.parseInt(at, 16);
+      const wallet = WALLET.toLowerCase();
+      let balance = BigInt(0);
+      for (const t of w.transfers) {
+        if (t.block > block) continue;
+        if (t.to.toLowerCase() === wallet) balance += t.value;
+        if (t.from.toLowerCase() === wallet) balance -= t.value;
+      }
+      return rpc(hex(balance));
     }
     if (method === "eth_getBlockByNumber") {
       requests.push({ kind: "rpc", method });
@@ -201,6 +214,36 @@ describe("WalletTransferHistory", () => {
     const logQueries = requests.filter((r) => r.method === "eth_getLogs");
     assert.ok(logQueries.length > 0);
     assert.ok(logQueries.every((r) => (r.span ?? 0) <= 50_000 && (r.addresses ?? 0) <= 10));
+  });
+
+  it("finds every deposit of an undeployed wallet from its balance history, however old", async () => {
+    const { history, requests } = world({
+      deployed: false,
+      archive: true,
+      usdcBalance: BigInt(30),
+      transfers: [
+        { block: 17, from: OTHER, to: WALLET, value: BigInt(10) }, // long before any log scan reaches
+        { block: HEAD - 5, from: OTHER, to: WALLET, value: BigInt(20) },
+      ],
+      indexed: null,
+    });
+
+    const page = await history.nextPage(20);
+
+    assert.deepEqual(
+      page.rows.map((r) => [r.blockNumber, r.value, r.timestamp]),
+      [
+        [HEAD - 5, "20", blockTime(HEAD - 5)],
+        [17, "10", blockTime(17)],
+      ],
+    );
+    assert.equal(page.hasMore, false);
+    assert.equal(page.coveredBackToMs, 0);
+    // Only the block of each deposit is read for logs.
+    assert.deepEqual(
+      requests.filter((r) => r.method === "eth_getLogs").map((r) => r.span),
+      [1, 1],
+    );
   });
 
   it("reports how far back it has looked when a page comes back empty", async () => {

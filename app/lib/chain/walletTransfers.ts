@@ -10,15 +10,24 @@
  *      contract was deployed. It only knows a Safe once it IS deployed, and it
  *      trails the chain by a short while.
  *   2. `Transfer` logs read straight from the Base RPC ({@link TransferLogCursor}),
- *      newest blocks first. This covers a wallet that has received funds but
- *      not yet sent anything (so is not deployed), and the minutes the indexer
- *      lags behind. Public RPCs only serve small block ranges and only for
- *      named contracts, so it reaches back hours to days, not months, and
- *      lists only the tokens it is given.
+ *      newest blocks first. This covers the minutes the indexer lags behind and
+ *      a deployed Safe it does not know. Public RPCs only serve small block
+ *      ranges and only for named contracts, so it reaches back hours to days,
+ *      not months, and lists only the tokens it is given.
  *
- * The first page asks both and merges them. After that the indexer pages on if
- * it knows the Safe; otherwise the log scan continues, a bounded number of
- * blocks per page — such a page can be short or empty while `hasMore` is true.
+ * A wallet that has received funds but not yet sent anything is not deployed,
+ * so the indexer does not know it. It cannot have sent anything either, so its
+ * balance of each token only ever went up, one step per receipt: a binary
+ * search over `balanceOf` at past blocks finds each step, and the one block's
+ * logs give the transfer ({@link TransferLogCursor.receiptsFromBalances}). That
+ * reaches back to the first deposit in a few dozen requests, from RPCs that
+ * serve past state (mainnet.base.org and drpc do; publicnode wants a key). When
+ * none does, the log scan above is used instead.
+ *
+ * The first page asks the indexer and the newest logs and merges them. After
+ * that the indexer pages on if it knows the Safe; otherwise the log scan
+ * continues, a bounded number of blocks per page — such a page can be short or
+ * empty while `hasMore` is true.
  *
  * Native ETH is left out, as before: gas prefunds would fill the list.
  *
@@ -110,6 +119,33 @@ const BLOCKS_PER_PAGE = 500_000;
  */
 const MAX_LOOKBACK_BLOCKS = 3_000_000;
 const BLOCK_HEADER_CONCURRENCY = 8;
+/**
+ * Past blocks whose balance is read at once in the receipt search: each round
+ * narrows the range to a quarter, so about 13 rounds cover Base's history.
+ */
+const BALANCE_PROBES_PER_ROUND = 3;
+/** Tokens searched at the same time (each with its own probes). */
+const BALANCE_SEARCH_TOKENS_AT_ONCE = 2;
+/**
+ * Waits before retrying a request of the receipt search that every endpoint
+ * refused. Public RPCs rate-limit bursts (HTTP 429) for a second or so, and
+ * one lost request would otherwise throw the whole search away.
+ */
+const SEARCH_RETRY_DELAYS_MS = [500, 1_500, 3_000] as const;
+
+const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+/** An RPC failure; `transient` when asking again later may succeed (rate limit, outage). */
+class RpcError extends Error {
+  readonly transient: boolean;
+
+  constructor(message: string, transient: boolean) {
+    super(message);
+    this.transient = transient;
+  }
+}
+
+const RATE_LIMIT_MESSAGE = /rate.?limit|too many requests/i;
 
 interface RawLog {
   address?: string;
@@ -210,6 +246,105 @@ export class TransferLogCursor {
       if (balance > BigInt(0)) held.set(token, balance);
     });
     return held;
+  }
+
+  /**
+   * Every receipt of an account that has never sent anything (an undeployed
+   * Safe), found from its balance history rather than by scanning logs.
+   *
+   * Its balance of each token only ever rose, one step per receipt. Going back
+   * from `held`, a search over `balanceOf` at past blocks finds the first block
+   * where the balance reached its current level; that block's logs hold the
+   * receipt(s), and the balance just before it is the next level to look for.
+   *
+   * Needs an RPC that serves past state. Throws when none does, or when a
+   * step has no Transfer to explain it (a rebasing token, or a wallet that is
+   * not what the caller thinks), so the caller can fall back to the log scan.
+   *
+   * @param held Current raw balance per lower-case token address.
+   * @returns Receipts newest first; `complete` is false when `maxPerToken` cut
+   *   a token's history short.
+   */
+  async receiptsFromBalances(
+    held: Map<string, bigint>,
+    maxPerToken: number,
+  ): Promise<{ rows: TransferLogRow[]; complete: boolean }> {
+    const head = parseHexInt(await this.call('eth_blockNumber', []));
+    if (head === null) throw new Error('Base RPC returned no block number.');
+
+    const rows: PendingRow[] = [];
+    let complete = true;
+    await inChunks([...held], BALANCE_SEARCH_TOKENS_AT_ONCE, async ([token, balance]) => {
+      let level = balance;
+      let upTo = head;
+      for (let found = 0; level > BigInt(0); found++) {
+        if (found === maxPerToken) {
+          complete = false;
+          return;
+        }
+        const block = await this.firstBlockWithBalance(token, level, upTo);
+        const receipts = await this.receiptsInBlock(token, block);
+        if (receipts.length === 0) {
+          throw new Error(`No transfer explains the balance change of ${token} at block ${block}.`);
+        }
+        rows.push(...receipts);
+        level = block === 0 ? BigInt(0) : await this.balanceAt(token, block - 1);
+        upTo = block - 1;
+      }
+    });
+
+    await this.fillTimestamps(rows);
+    rows.sort(newestFirst);
+    return { rows: rows as TransferLogRow[], complete };
+  }
+
+  /**
+   * First block at or below `upTo` where the balance is at least `level`,
+   * given that it is at `upTo`. Several blocks are read per round.
+   */
+  private async firstBlockWithBalance(token: string, level: bigint, upTo: number): Promise<number> {
+    let low = 0;
+    let high = upTo;
+    while (low < high) {
+      const span = high - low;
+      const probes = [
+        ...new Set(
+          Array.from({ length: BALANCE_PROBES_PER_ROUND }, (_, i) =>
+            low + Math.floor((span * (i + 1)) / (BALANCE_PROBES_PER_ROUND + 1)),
+          ),
+        ),
+      ];
+      const balances = await Promise.all(probes.map((block) => this.balanceAt(token, block)));
+      const first = balances.findIndex((b) => b >= level);
+      if (first === -1) {
+        low = probes[probes.length - 1] + 1;
+      } else {
+        high = probes[first];
+        if (first > 0) low = probes[first - 1] + 1;
+      }
+    }
+    return low;
+  }
+
+  /** Raw balance of `token` held by the account at the end of `block`. */
+  private async balanceAt(token: string, block: number): Promise<bigint> {
+    const data = `${BALANCE_OF_SELECTOR}${topicForAddress(this.address).slice(2)}`;
+    const result = await this.callPatiently('eth_call', [{ to: token, data }, toHex(block)]);
+    // Before the token contract existed the call returns no data.
+    return typeof result === 'string' && result.length > 2 ? BigInt(result) : BigInt(0);
+  }
+
+  /** Transfers of `token` into the account in one block. */
+  private async receiptsInBlock(token: string, block: number): Promise<PendingRow[]> {
+    const logs = (await this.callPatiently('eth_getLogs', [
+      {
+        fromBlock: toHex(block),
+        toBlock: toHex(block),
+        address: [token],
+        topics: [TRANSFER_TOPIC, null, topicForAddress(this.address)],
+      },
+    ])) as RawLog[];
+    return logs.map((log) => this.rowFromLog(log)).filter((row): row is PendingRow => row !== null);
   }
 
   /** Scan only these token contracts from now on (lower-case addresses). */
@@ -389,7 +524,8 @@ export class TransferLogCursor {
 
   /** JSON-RPC call against the first endpoint that answers, starting with the last good one. */
   private async call(method: string, params: unknown[]): Promise<unknown> {
-    let lastError: unknown = new Error('Base RPC request failed.');
+    let lastError: Error = new Error('Base RPC request failed.');
+    let transient = false;
     for (let attempt = 0; attempt < this.rpcUrls.length; attempt++) {
       const index = (this.rpcIndex + attempt) % this.rpcUrls.length;
       try {
@@ -397,28 +533,54 @@ export class TransferLogCursor {
         this.rpcIndex = index;
         return result;
       } catch (error) {
-        lastError = error;
+        lastError = error instanceof Error ? error : new Error(String(error));
+        if (error instanceof RpcError ? error.transient : true) transient = true;
       }
     }
-    throw lastError;
+    throw new RpcError(lastError.message, transient);
+  }
+
+  /**
+   * {@link call}, retried after a pause while some endpoint refused it only
+   * for the moment. An answer like "no archive state" is final and not retried.
+   */
+  private async callPatiently(method: string, params: unknown[]): Promise<unknown> {
+    for (const wait of SEARCH_RETRY_DELAYS_MS) {
+      try {
+        return await this.call(method, params);
+      } catch (error) {
+        if (!(error instanceof RpcError && error.transient)) throw error;
+        await delay(wait);
+      }
+    }
+    return this.call(method, params);
   }
 
   private async callOne(url: string, method: string, params: unknown[]): Promise<unknown> {
     this.requestId += 1;
-    const response = await this.fetchFn(url, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ jsonrpc: '2.0', id: this.requestId, method, params }),
-    });
+    let response: HttpFetchResponse;
+    try {
+      response = await this.fetchFn(url, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ jsonrpc: '2.0', id: this.requestId, method, params }),
+      });
+    } catch (error) {
+      throw new RpcError(error instanceof Error ? error.message : String(error), true);
+    }
+    const busy = response.status === 429 || response.status >= 500;
 
     // A body that is not JSON is reported through the status below.
     const body = (await response.json().catch(() => null)) as {
       result?: unknown;
       error?: { message?: string };
     } | null;
-    if (body?.error) throw new Error(body.error.message || `Base RPC error (${method}).`);
+    if (body?.error) {
+      const message = body.error.message || `Base RPC error (${method}).`;
+      throw new RpcError(message, busy || RATE_LIMIT_MESSAGE.test(message));
+    }
     if (!response.ok || !body || !('result' in body)) {
-      throw new Error(`Base RPC error ${response.status} (${method}).`);
+      throw new RpcError(`Base RPC error ${response.status} (${method}).`, busy);
     }
     return body.result;
   }
@@ -530,6 +692,12 @@ export interface WalletTransferHistoryOptions {
  * minutes: one window of the newest blocks (three requests) is plenty.
  */
 const RECENT_BLOCKS_WITH_INDEXER = WINDOW_SPANS[0];
+/**
+ * Receipts looked up per token for an undeployed Safe. Each costs about 40
+ * requests; a wallet that has received more than this before ever sending
+ * shows the newest ones and says history is incomplete before them.
+ */
+const MAX_RECEIPTS_PER_TOKEN = 25;
 
 /** Same transfer from either source: hash, token, parties and amount. */
 function transferKey(row: TransferLogRow): string {
@@ -554,10 +722,14 @@ export class WalletTransferHistory {
   private readonly logs: TransferLogCursor;
   private readonly indexer: SafeTransferPager | null;
   private readonly address: string;
-  private source: 'undecided' | 'indexer' | 'logs' | 'empty' = 'undecided';
+  private source: 'undecided' | 'indexer' | 'logs' | 'receipts' | 'empty' = 'undecided';
   /** Balances of an undeployed Safe: the log scan is complete once receipts reach them. */
   private expectedReceipts: Map<string, bigint> | null = null;
   private receiptsComplete = false;
+  /** An undeployed Safe's receipts from its balance history, not handed out yet. */
+  private receipts: TransferLogRow[] = [];
+  /** Time of the oldest receipt handed out so far, Unix ms. */
+  private oldestReceiptMs: number | null = null;
 
   constructor(options: WalletTransferHistoryOptions) {
     const fetchFn: HttpFetch = options.fetchFn ?? ((url, init) => fetch(url, init));
@@ -571,6 +743,7 @@ export class WalletTransferHistory {
   async nextPage(pageSize: number): Promise<WalletTransferPage> {
     if (this.source === 'indexer') return this.indexerPage(pageSize, []);
     if (this.source === 'logs') return this.logsPage(pageSize);
+    if (this.source === 'receipts') return this.receiptsPage(pageSize);
     if (this.source === 'empty') return { rows: [], hasMore: false, coveredBackToMs: 0 };
 
     // First page. Ask the indexer first: whether it knows this Safe decides how
@@ -602,10 +775,33 @@ export class WalletTransferHistory {
       }
       this.logs.restrictTokens(held.keys());
       this.expectedReceipts = held;
+
+      // Its balance history pins down every receipt, however old. Without an
+      // RPC that serves past state, fall back to scanning recent logs.
+      const found = await this.logs
+        .receiptsFromBalances(held, MAX_RECEIPTS_PER_TOKEN)
+        .catch(() => null);
+      if (found) {
+        this.receipts = found.rows;
+        this.receiptsComplete = found.complete;
+        this.source = 'receipts';
+        return this.receiptsPage(pageSize);
+      }
     }
     const page = await this.logsPage(pageSize);
     this.source = 'logs';
     return page;
+  }
+
+  private receiptsPage(pageSize: number): WalletTransferPage {
+    const rows = this.receipts.splice(0, pageSize);
+    if (rows.length > 0) this.oldestReceiptMs = rows[rows.length - 1].timestamp * 1000;
+    const hasMore = this.receipts.length > 0;
+    return {
+      rows,
+      hasMore,
+      coveredBackToMs: !hasMore && this.receiptsComplete ? 0 : this.oldestReceiptMs,
+    };
   }
 
   private async indexerPage(pageSize: number, recentRows: TransferLogRow[]): Promise<WalletTransferPage> {
