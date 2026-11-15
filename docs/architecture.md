@@ -117,6 +117,32 @@ Production: Next rewrites `/api/*` → backend (`next.config.ts`).
 | Browser wallet vault | `app/lib/localWallet/` (`npm test`) |
 | Signer abstraction | `app/lib/signer/` |
 
+## Known limitations
+
+Deliberate gaps, each with what it would take to close it.
+
+**Bank deposits and payouts keep hand-written loaders.** Four effects load data
+with `setState` inside `useEffect`, behind an `eslint-disable` for
+`react-hooks/set-state-in-effect`: two in `AddMoneyView.tsx`, two in the bank
+branch of `MakePaymentView.tsx`. Every other loader moved to `app/hooks/useLoad.ts`
+(react-query). These were left because opening them creates virtual accounts or
+payout addresses at Bridge through the backend, and there is no sandbox to check
+a rewrite against. Rewrite them with `useLoad` once a Bridge sandbox exists.
+
+**Not exercised with real funds or a paid account.** Sending, swaps and bridges,
+Morpho Earn and Borrow, and Treasury proposals, approvals and owner changes have
+only been loaded, never submitted. In backend mode the dashboard is open to Pro
+and Ultimate plans only, and no paid account was available: TrackFi, stocks,
+Plaid, the card waitlist and the Treasury server sync (which actually runs since
+the `useOrgStore` persistence fix) have only been type-checked and built.
+
+**Browsers.** Create and unlock have been run in Chromium and Chrome, not in
+Safari or Firefox.
+
+**Transaction history** comes from `app/lib/chain/walletTransfers.ts`, shared
+verbatim with mobile-app: its limits are listed in mobile-app
+`docs/architecture.md` → Known limitations.
+
 ## Repository layout
 
 ```
