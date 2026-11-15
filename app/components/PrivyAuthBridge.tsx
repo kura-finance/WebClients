@@ -12,6 +12,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { usePrivy, useIdentityToken } from '@privy-io/react-auth';
 import { useAppStore } from '@/store/useAppStore';
+import { useSignerSession } from '@/lib/signer';
 
 export default function PrivyAuthBridge() {
   const { ready, authenticated, getAccessToken } = usePrivy();
@@ -50,17 +51,20 @@ export default function PrivyAuthBridge() {
 /**
  * 統一登出：先登出 Privy（避免 bridge 再次換 token），再清除 Kura session。
  * 在會觸發登出的 UI（設定抽屜等）使用。
+ *
+ * Goes through the signer so it also works without Privy: with a browser wallet
+ * (no backend) this locks the wallet — the encrypted vault is kept.
  */
 export function useKuraLogout(): () => Promise<void> {
-  const { logout: privyLogout } = usePrivy();
+  const { logout: signerLogout } = useSignerSession();
   const storeLogout = useAppStore((s) => s.logout);
 
   return useCallback(async () => {
     try {
-      await privyLogout();
+      await signerLogout();
     } catch (error) {
       console.warn('[useKuraLogout] Privy logout failed (continuing)', error);
     }
     await storeLogout();
-  }, [privyLogout, storeLogout]);
+  }, [signerLogout, storeLogout]);
 }

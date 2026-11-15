@@ -7,7 +7,7 @@
  *   Crypto     — Base spot portfolio (excludes dust)
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useLoad } from "@/hooks/useLoad";
 import { fetchPortfolioBalances } from "@/lib/baseChain";
 import { fetchCoinGeckoPrices, type PriceMap } from "@/lib/coingeckoPrices";
 import { isHexAddress } from "@/lib/formatDisplay";
@@ -79,44 +79,33 @@ async function loadCryptoRows(sca: `0x${string}`): Promise<TreasuryHoldingRow[]>
   return rows.sort((a, b) => b.amountUsd - a.amountUsd);
 }
 
+const NO_ROWS: TreasuryHoldingRow[] = [];
+
 export function useTreasuryHoldings(scaAddress: string | null | undefined) {
-  const [loanRows, setLoanRows] = useState<TreasuryHoldingRow[]>([]);
-  const [investmentRows, setInvestmentRows] = useState<TreasuryHoldingRow[]>([]);
-  const [cryptoRows, setCryptoRows] = useState<TreasuryHoldingRow[]>([]);
-  const [loading, setLoading] = useState(false);
+  const valid = isHexAddress(scaAddress);
 
-  const refresh = useCallback(async () => {
-    if (!isHexAddress(scaAddress)) {
-      setLoanRows([]);
-      setInvestmentRows([]);
-      setCryptoRows([]);
-      return;
-    }
-    setLoading(true);
-    try {
-      const [loans, investments, crypto] = await Promise.all([
-        loadLoanRows(scaAddress),
-        loadInvestmentRows(scaAddress),
-        loadCryptoRows(scaAddress),
+  const { data, fetching, error, refresh } = useLoad({
+    key: ["treasury", "holdings", valid ? scaAddress.toLowerCase() : null],
+    load: async () => {
+      const address = scaAddress as `0x${string}`;
+      const [loanRows, investmentRows, cryptoRows] = await Promise.all([
+        loadLoanRows(address),
+        loadInvestmentRows(address),
+        loadCryptoRows(address),
       ]);
-      setLoanRows(loans);
-      setInvestmentRows(investments);
-      setCryptoRows(crypto);
-    } catch {
-      setLoanRows([]);
-      setInvestmentRows([]);
-      setCryptoRows([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [scaAddress]);
+      return { loanRows, investmentRows, cryptoRows };
+    },
+    errorMessage: "Failed to load Treasury holdings",
+    enabled: valid,
+  });
 
-  useEffect(() => {
-    void refresh();
-  }, [refresh]);
+  // As before: nothing is shown for a failed load or a missing address.
+  const rows = valid && !error ? data : undefined;
+  const loanRows = rows?.loanRows ?? NO_ROWS;
+  const investmentRows = rows?.investmentRows ?? NO_ROWS;
+  const cryptoRows = rows?.cryptoRows ?? NO_ROWS;
 
-  const sum = (rows: TreasuryHoldingRow[]) =>
-    rows.reduce((s, r) => s + r.amountUsd, 0);
+  const sum = (list: TreasuryHoldingRow[]) => list.reduce((s, r) => s + r.amountUsd, 0);
 
   return {
     loanRows,
@@ -125,7 +114,7 @@ export function useTreasuryHoldings(scaAddress: string | null | undefined) {
     loanUsd: sum(loanRows),
     investmentUsd: sum(investmentRows),
     cryptoUsd: sum(cryptoRows),
-    loading,
+    loading: fetching,
     refresh,
   };
 }

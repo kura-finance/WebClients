@@ -1,6 +1,5 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
 import {
   CURATED_STOCKS,
   fetchCuratedStockQuotes,
@@ -8,8 +7,9 @@ import {
   type StockQuoteRow,
 } from "@/lib/stockCatalog";
 import { stockLogoUrl } from "@/lib/assetLogos";
-import { hasBackendUrl } from "@/config/env";
+import { features } from "@/config/features";
 import { requestJson } from "@/lib/httpClient";
+import { useLoad } from "@/hooks/useLoad";
 
 interface DinariStock {
   id: string;
@@ -18,7 +18,7 @@ interface DinariStock {
 }
 
 async function tryFetchDinariCatalog(): Promise<DinariStock[] | null> {
-  if (!hasBackendUrl()) return null;
+  if (!features.stocks) return null;
   try {
     return await requestJson<DinariStock[]>(
       "/api/dinari/stocks?page=1&pageSize=50",
@@ -30,65 +30,59 @@ async function tryFetchDinariCatalog(): Promise<DinariStock[] | null> {
   }
 }
 
+type StockSource = "coingecko" | "dinari";
+
+async function loadStockCatalog(): Promise<{ stocks: StockQuoteRow[]; source: StockSource }> {
+  const [quotes, dinari] = await Promise.all([
+    fetchCuratedStockQuotes(),
+    tryFetchDinariCatalog(),
+  ]);
+
+  if (dinari && dinari.length > 0) {
+    const bySymbol = new Map(quotes.map((q) => [q.symbol.toUpperCase(), q]));
+    const merged: StockQuoteRow[] = dinari.map((d) => {
+      const sym = (d.symbol || "").toUpperCase();
+      const q = bySymbol.get(sym);
+      const meta = findStockMeta(sym);
+      return {
+        symbol: sym,
+        name: d.name || q?.name || meta?.name || sym,
+        color: q?.color ?? meta?.color ?? "#8B5CF6",
+        logoUrl: q?.logoUrl ?? stockLogoUrl(sym),
+        price: q?.price ?? 0,
+        change24h: q?.change24h ?? null,
+        volume24h: q?.volume24h ?? null,
+        tvSymbol: q?.tvSymbol ?? meta?.tvSymbol ?? `NASDAQ:${sym}`,
+      };
+    });
+    const curatedOrder = CURATED_STOCKS.map((s) => s.symbol);
+    merged.sort((a, b) => {
+      const ia = curatedOrder.indexOf(a.symbol);
+      const ib = curatedOrder.indexOf(b.symbol);
+      const ra = ia === -1 ? 999 : ia;
+      const rb = ib === -1 ? 999 : ib;
+      return ra - rb;
+    });
+    return { stocks: merged, source: "dinari" };
+  }
+  return { stocks: quotes, source: "coingecko" };
+}
+
+const NO_STOCKS: StockQuoteRow[] = [];
+
 export function useStockCatalog() {
-  const [stocks, setStocks] = useState<StockQuoteRow[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [source, setSource] = useState<"coingecko" | "dinari">("coingecko");
+  const { data, loading, refreshing, error, refresh } = useLoad({
+    key: ["stocks", "catalog"],
+    load: loadStockCatalog,
+    errorMessage: "Failed to load stocks",
+  });
 
-  const load = useCallback(async (isRefresh = false) => {
-    if (isRefresh) setRefreshing(true);
-    else setLoading(true);
-    setError(null);
-    try {
-      const [quotes, dinari] = await Promise.all([
-        fetchCuratedStockQuotes(),
-        tryFetchDinariCatalog(),
-      ]);
-
-      if (dinari && dinari.length > 0) {
-        const bySymbol = new Map(quotes.map((q) => [q.symbol.toUpperCase(), q]));
-        const merged: StockQuoteRow[] = dinari.map((d) => {
-          const sym = (d.symbol || "").toUpperCase();
-          const q = bySymbol.get(sym);
-          const meta = findStockMeta(sym);
-          return {
-            symbol: sym,
-            name: d.name || q?.name || meta?.name || sym,
-            color: q?.color ?? meta?.color ?? "#8B5CF6",
-            logoUrl: q?.logoUrl ?? stockLogoUrl(sym),
-            price: q?.price ?? 0,
-            change24h: q?.change24h ?? null,
-            volume24h: q?.volume24h ?? null,
-            tvSymbol: q?.tvSymbol ?? meta?.tvSymbol ?? `NASDAQ:${sym}`,
-          };
-        });
-        const curatedOrder = CURATED_STOCKS.map((s) => s.symbol);
-        merged.sort((a, b) => {
-          const ia = curatedOrder.indexOf(a.symbol);
-          const ib = curatedOrder.indexOf(b.symbol);
-          const ra = ia === -1 ? 999 : ia;
-          const rb = ib === -1 ? 999 : ib;
-          return ra - rb;
-        });
-        setStocks(merged);
-        setSource("dinari");
-      } else {
-        setStocks(quotes);
-        setSource("coingecko");
-      }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load stocks");
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void load(false);
-  }, [load]);
-
-  return { stocks, loading, refreshing, error, source, refresh: () => load(true) };
+  return {
+    stocks: data?.stocks ?? NO_STOCKS,
+    loading,
+    refreshing,
+    error,
+    source: data?.source ?? ("coingecko" as StockSource),
+    refresh,
+  };
 }

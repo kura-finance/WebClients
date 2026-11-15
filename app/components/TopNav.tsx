@@ -10,6 +10,7 @@ import UserSettingsDrawer from './UserSettingsDrawer';
 import { useAppStore } from '@/store/useAppStore';
 import { type Investment, useFinanceStore } from '@/store/useFinanceStore';
 import { fetchDeBankProtocolPositions, fetchDeBankTokenPositions } from '@/lib/debankApi';
+import { features } from '@/config/features';
 
 const SYNC_VISIBLE_ROUTES = ['/dashboard/accounts', '/dashboard/crypto', '/dashboard/defi-protocol'] as const;
 
@@ -41,8 +42,11 @@ export default function TopNav() {
   const plaidLastSyncedAt = useFinanceStore((state) => state.plaidLastSyncedAt);
   const displayName = userProfile.displayName.trim();
   const avatarInitial = displayName ? displayName.slice(0, 1).toUpperCase() : '?';
+  // Sync refreshes TrackFi data (Plaid / DeBank / asset history) — backend only.
   const shouldShowSync = useMemo(
-    () => SYNC_VISIBLE_ROUTES.some((route) => pathname === route || pathname.startsWith(`${route}/`)),
+    () =>
+      features.trackFi &&
+      SYNC_VISIBLE_ROUTES.some((route) => pathname === route || pathname.startsWith(`${route}/`)),
     [pathname],
   );
 

@@ -5,7 +5,8 @@ import { Inter, Newsreader } from "next/font/google";
 import "./globals.css";
 import Web3ModalProvider from '@/context/Web3ModalProvider';
 import { PlaidProvider } from '@/context/PlaidProvider';
-import PrivyProvider from '@/context/PrivyProvider';
+import SignerProvider from '@/context/SignerProvider';
+import { features } from '@/config/features';
 
 const inter = Inter({
   subsets: ["latin"],
@@ -33,12 +34,9 @@ export const metadata: Metadata = {
   icons: {
     icon: [
       { url: '/favicon.svg', type: 'image/svg+xml' },
-      { url: '/favicon.ico' },
+      { url: '/favicon.ico', sizes: '32x32' },
     ],
-    apple: [
-      { url: '/ios/AppIcon.appiconset/icon-60@3x.png', sizes: '180x180', type: 'image/png' },
-      { url: '/ios/AppIcon.appiconset/icon-60@2x.png', sizes: '120x120', type: 'image/png' },
-    ],
+    apple: [{ url: '/apple-touch-icon.png', sizes: '180x180', type: 'image/png' }],
   },
   openGraph: {
     title: siteTitle,
@@ -69,7 +67,13 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${inter.variable} ${newsreader.variable}`}>
+    // The theme script below adds `dark` to <html> before React hydrates, so its
+    // class list legitimately differs from the server's: don't report that.
+    <html
+      lang="en"
+      className={`${inter.variable} ${newsreader.variable}`}
+      suppressHydrationWarning
+    >
       <head>
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5, viewport-fit=cover" />
         <meta name="mobile-web-app-capable" content="yes" />
@@ -90,13 +94,16 @@ export default function RootLayout({
             })();
           `}
         </Script>
-        <Script
-          src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"
-          strategy="beforeInteractive"
-        />
+        {/* Plaid Link is only used by TrackFi (backend). */}
+        {features.trackFi ? (
+          <Script
+            src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"
+            strategy="beforeInteractive"
+          />
+        ) : null}
       </head>
       <body className="w-full h-screen bg-[var(--kura-bg)] text-[var(--kura-text)] flex flex-col antialiased selection:bg-[var(--kura-primary)]/30">
-        <PrivyProvider>
+        <SignerProvider>
           <PlaidProvider>
             <Web3ModalProvider>
               <div className="flex flex-col flex-1 min-h-0 overflow-y-auto w-full h-full">
@@ -104,7 +111,7 @@ export default function RootLayout({
               </div>
             </Web3ModalProvider>
           </PlaidProvider>
-        </PrivyProvider>
+        </SignerProvider>
       </body>
     </html>
   );

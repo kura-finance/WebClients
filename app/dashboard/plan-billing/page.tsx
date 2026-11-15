@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { useAppStore } from '@/store/useAppStore';
@@ -19,6 +19,18 @@ function formatMembershipLabel(label: string): string {
   const plan = getPlanById(tier === 'vip' ? 'ultimate' : tier);
   return plan?.name ?? label.replace(/\s+Member$/i, '') ?? 'Kura Basic';
 }
+
+/** What Pro and Ultimate add on top of Basic. Built from static plan config, so computed once. */
+const UPGRADE_HIGHLIGHTS = (() => {
+  const pro = getPlanById('pro');
+  const ultimate = getPlanById('ultimate');
+  if (!pro || !ultimate) return [];
+
+  return [
+    ...pro.features.filter((feature) => feature.title !== 'Everything in Basic'),
+    ...ultimate.features.filter((feature) => feature.title !== 'Everything in Pro'),
+  ];
+})();
 
 export default function PlanBillingPage() {
   const membershipLabel = useAppStore((state) => state.userProfile.membershipLabel);
@@ -68,16 +80,7 @@ export default function PlanBillingPage() {
     billingStatus?.hasActiveSubscription === true ||
     billingStatus?.isActive === true;
 
-  const upgradeHighlights = useMemo(() => {
-    const pro = getPlanById('pro');
-    const ultimate = getPlanById('ultimate');
-    if (!pro || !ultimate) return [];
-
-    return [
-      ...pro.features.filter((feature) => feature.title !== 'Everything in Basic'),
-      ...ultimate.features.filter((feature) => feature.title !== 'Everything in Pro'),
-    ];
-  }, []);
+  const upgradeHighlights = UPGRADE_HIGHLIGHTS;
 
   const handleOpenBillingPortal = async () => {
     try {

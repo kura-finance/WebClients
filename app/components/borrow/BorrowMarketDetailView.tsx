@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useState } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -8,7 +8,6 @@ import {
   Loader2,
   RefreshCw,
 } from "lucide-react";
-import { useWallets } from "@privy-io/react-auth";
 import {
   collateralDisplayName,
   computeUserLtvRatio,
@@ -32,10 +31,11 @@ import {
 import { readErc20Balance } from "@/lib/morphoEarn";
 import { submitCallsSmartOrTreasury } from "@/lib/submitTradingCalls";
 import { errMessage, formatUsd, truncateAddress } from "@/lib/formatDisplay";
-import { isPimlicoConfigured, isPrivyConfigured } from "@/config/env";
+import { useLoad } from "@/hooks/useLoad";
 import { PORTFOLIO_TOKENS } from "@/lib/portfolioTokens";
 import { cryptoLogoUrl } from "@/lib/assetLogos";
-import PrivyEoaSync from "@/components/wallet/PrivyEoaSync";
+import { isSignerConfigured, useSignerWallet } from "@/lib/signer";
+import SignerEoaSync from "@/components/wallet/SignerEoaSync";
 import TradingAccountPicker, {
   useTradingAccount,
 } from "@/components/wallet/TradingAccountPicker";
@@ -54,7 +54,7 @@ function marketLogo(market: MorphoMarketDetail): { src: string | null; color: st
     (t) => t.symbol.toLowerCase() === symbol.toLowerCase(),
   );
   return {
-    src: cryptoLogoUrl(symbol),
+    src: cryptoLogoUrl(symbol) ?? market.collateralAsset.logoURI ?? null,
     color: token?.color ?? "#6366F1",
   };
 }
@@ -74,106 +74,72 @@ export default function BorrowMarketDetailView({ marketId }: { marketId: string 
     personal,
     treasury,
   } = useTradingAccount();
-  const { wallets } = useWallets();
-  const privyWallet =
-    wallets.find((w) => w.walletClientType === "privy") ?? wallets[0] ?? null;
-
-  const [detail, setDetail] = useState<MorphoMarketDetail | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const signerWallet = useSignerWallet();
 
   const [mode, setMode] = useState<"borrow" | "repay">("borrow");
   const [collateralAmount, setCollateralAmount] = useState("");
   const [borrowAmount, setBorrowAmount] = useState("");
   const [repayAmount, setRepayAmount] = useState("");
-  const [collateralBal, setCollateralBal] = useState(0);
-  const [usdcBal, setUsdcBal] = useState(0);
-  const [positionCollateral, setPositionCollateral] = useState(0);
-  const [borrowUsd, setBorrowUsd] = useState(0);
-  const [collateralUsd, setCollateralUsd] = useState(0);
-  const [hasDebt, setHasDebt] = useState(false);
-  const [positionLoading, setPositionLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [txHash, setTxHash] = useState<string | null>(null);
   const [proposedHash, setProposedHash] = useState<string | null>(null);
 
-  const loadDetail = useCallback(
-    async (isRefresh = false) => {
-      if (isRefresh) setRefreshing(true);
-      else setLoading(true);
-      setError(null);
-      try {
-        const next = await fetchBorrowMarketDetail(marketId);
-        if (!next) {
-          setDetail(null);
-          setError("Market not found on Morpho.");
-        } else {
-          setDetail(next);
-        }
-      } catch (e) {
-        setError(errMessage(e));
-        setDetail(null);
-      } finally {
-        setLoading(false);
-        setRefreshing(false);
-      }
+  const detailQuery = useLoad({
+    key: ["borrow", "market", marketId.toLowerCase()],
+    load: async (): Promise<MorphoMarketDetail> => {
+      const next = await fetchBorrowMarketDetail(marketId);
+      if (!next) throw new Error("Market not found on Morpho.");
+      return next;
     },
-    [marketId],
-  );
+    errorMessage: "Something went wrong.",
+    describeError: errMessage,
+  });
+  // A failed load shows the error instead of an earlier copy of the market.
+  const detail = detailQuery.error ? null : (detailQuery.data ?? null);
+  const { loading, refreshing, error } = detailQuery;
 
-  const loadPosition = useCallback(async () => {
-    if (!scaAddress || !detail) {
-      setCollateralBal(0);
-      setUsdcBal(0);
-      setPositionCollateral(0);
-      setBorrowUsd(0);
-      setCollateralUsd(0);
-      setHasDebt(false);
-      return;
-    }
-    setPositionLoading(true);
-    try {
-      const mp = toMorphoMarketParams(detail);
-      const [cBal, uBal, display] = await Promise.all([
+  const positionQuery = useLoad({
+    key: ["borrow", "position", marketId.toLowerCase(), scaAddress?.toLowerCase() ?? null],
+    load: async () => {
+      const market = detail as MorphoMarketDetail;
+      const account = scaAddress as `0x${string}`;
+      const [collateralBal, usdcBal, display] = await Promise.all([
         readErc20Balance(
-          detail.collateralAsset.address as `0x${string}`,
-          scaAddress as `0x${string}`,
-          detail.collateralAsset.decimals,
+          market.collateralAsset.address as `0x${string}`,
+          account,
+          market.collateralAsset.decimals,
         ),
         readErc20Balance(
-          detail.loanAsset.address as `0x${string}`,
-          scaAddress as `0x${string}`,
-          detail.loanAsset.decimals,
+          market.loanAsset.address as `0x${string}`,
+          account,
+          market.loanAsset.decimals,
         ),
-        readMorphoUserPositionDisplay(mp, scaAddress as `0x${string}`),
+        readMorphoUserPositionDisplay(toMorphoMarketParams(market), account),
       ]);
-      setCollateralBal(cBal);
-      setUsdcBal(uBal);
-      setPositionCollateral(display.collateralFormatted);
-      setBorrowUsd(display.borrowAssetsUsd);
-      setCollateralUsd(display.collateralUsd);
-      setHasDebt(display.hasDebt);
-    } catch {
-      setCollateralBal(0);
-      setUsdcBal(0);
-      setPositionCollateral(0);
-      setBorrowUsd(0);
-      setCollateralUsd(0);
-      setHasDebt(false);
-    } finally {
-      setPositionLoading(false);
-    }
-  }, [scaAddress, detail]);
-
-  useEffect(() => {
-    void loadDetail(false);
-  }, [loadDetail]);
-
-  useEffect(() => {
-    void loadPosition();
-  }, [loadPosition]);
+      return {
+        collateralBal,
+        usdcBal,
+        positionCollateral: display.collateralFormatted,
+        borrowUsd: display.borrowAssetsUsd,
+        collateralUsd: display.collateralUsd,
+        hasDebt: display.hasDebt,
+      };
+    },
+    errorMessage: "Failed to load position",
+    enabled: Boolean(scaAddress && detail),
+  });
+  // No wallet, no market or a failed read all show an empty position.
+  const position = scaAddress && detail && !positionQuery.error ? positionQuery.data : undefined;
+  const collateralBal = position?.collateralBal ?? 0;
+  const usdcBal = position?.usdcBal ?? 0;
+  const positionCollateral = position?.positionCollateral ?? 0;
+  const borrowUsd = position?.borrowUsd ?? 0;
+  const collateralUsd = position?.collateralUsd ?? 0;
+  const hasDebt = position?.hasDebt ?? false;
+  const positionLoading = positionQuery.fetching;
+  const refreshDetail = detailQuery.refresh;
+  const loadPosition = positionQuery.refresh;
 
   const apy = detail ? borrowApy(detail) : 0;
   const maxLltv = detail ? parseMarketMaxLltv(detail.lltv) : null;
@@ -186,8 +152,7 @@ export default function BorrowMarketDetailView({ marketId }: { marketId: string 
   const canBorrow =
     !!detail &&
     !!scaAddress &&
-    !!privyWallet &&
-    (isTreasury || isPimlicoConfigured()) &&
+    !!signerWallet &&
     !!detail.oracleAddress &&
     !!detail.irmAddress &&
     Number(collateralAmount) > 0 &&
@@ -198,14 +163,13 @@ export default function BorrowMarketDetailView({ marketId }: { marketId: string 
   const canRepay =
     !!detail &&
     !!scaAddress &&
-    !!privyWallet &&
-    (isTreasury || isPimlicoConfigured()) &&
+    !!signerWallet &&
     hasDebt &&
     (Number(repayAmount) > 0 || repayAmount === "") &&
     !busy;
 
   const submit = async () => {
-    if (!detail || !scaAddress || !privyWallet) return;
+    if (!detail || !scaAddress || !signerWallet) return;
     setActionError(null);
     setTxHash(null);
     setProposedHash(null);
@@ -225,7 +189,7 @@ export default function BorrowMarketDetailView({ marketId }: { marketId: string 
               repayAll: !(Number(repayAmount) > 0),
               repayAmount: Number(repayAmount) > 0 ? Number(repayAmount) : undefined,
             });
-      const provider = (await privyWallet.getEthereumProvider()) as {
+      const provider = (await signerWallet.getEthereumProvider()) as {
         request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
       };
       const result = await submitCallsSmartOrTreasury({
@@ -246,7 +210,7 @@ export default function BorrowMarketDetailView({ marketId }: { marketId: string 
       setCollateralAmount("");
       setBorrowAmount("");
       setRepayAmount("");
-      void loadDetail(true);
+      void refreshDetail();
     } catch (e) {
       setActionError(errMessage(e));
     } finally {
@@ -307,8 +271,8 @@ export default function BorrowMarketDetailView({ marketId }: { marketId: string 
 
   return (
     <DashboardPage>
-      {isPrivyConfigured ? (
-        <PrivyEoaSync
+      {isSignerConfigured ? (
+        <SignerEoaSync
           onEoa={personal.applyEoaAddress}
           persistedEoa={personal.record.walletAddress}
         />
@@ -361,7 +325,7 @@ export default function BorrowMarketDetailView({ marketId }: { marketId: string 
             className="rounded-full text-[var(--kura-text-secondary)]"
             disabled={refreshing}
             onClick={() => {
-              void loadDetail(true);
+              void refreshDetail();
               void loadPosition();
             }}
           >

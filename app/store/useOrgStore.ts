@@ -16,6 +16,8 @@ import {
 
 export type { OrgTreasury, TreasurySource };
 
+const LEGACY_ORG_KEY = "kura-org-banking-v7";
+
 function uid(prefix: string): string {
   return `${prefix}_${Math.random().toString(36).slice(2, 10)}`;
 }
@@ -365,35 +367,80 @@ export const useOrgStore = create<OrgState>()(
         treasuries: state.treasuries,
         activeTreasuryId: state.activeTreasuryId,
       }),
-      onRehydrateStorage: () => (state) => {
+      // Runs while the store is still being created (localStorage rehydrates
+      // synchronously), so it must not touch `useOrgStore`: doing so throws and
+      // leaves `persist.hasHydrated()` false forever. Work on the merged state.
+      merge: (persisted, current) => {
+        const merged = { ...current, ...(persisted as Partial<OrgState> | undefined) };
+        let { treasuries, activeTreasuryId } = merged;
         try {
-          const legacyRaw = localStorage.getItem("kura-org-banking-v7");
-          if (legacyRaw && (!state?.treasuries || state.treasuries.length === 0)) {
+          const legacyRaw = localStorage.getItem(LEGACY_ORG_KEY);
+          if (legacyRaw && treasuries.length === 0) {
             const migrated = migrateLegacyTreasuries(JSON.parse(legacyRaw));
             if (migrated) {
-              useOrgStore.setState({
-                treasuries: migrated.treasuries,
-                activeTreasuryId: migrated.activeTreasuryId,
-              });
+              treasuries = migrated.treasuries;
+              activeTreasuryId = migrated.activeTreasuryId;
             }
-            localStorage.removeItem("kura-org-banking-v7");
+            // Rehydration does not write back. Once the store exists, save the
+            // migrated workspace under the new key, and only then drop the old one.
+            queueMicrotask(() => {
+              try {
+                useOrgStore.setState({});
+                localStorage.removeItem(LEGACY_ORG_KEY);
+              } catch {
+                /* keep the legacy copy; migration runs again next load */
+              }
+            });
           }
         } catch {
           /* ignore migration errors */
         }
-        const current = useOrgStore.getState();
-        if (
-          current.activeTreasuryId &&
-          !current.treasuries.some((t) => t.id === current.activeTreasuryId)
-        ) {
-          useOrgStore.setState({
-            activeTreasuryId: current.treasuries[0]?.id ?? null,
-          });
+        if (activeTreasuryId && !treasuries.some((t) => t.id === activeTreasuryId)) {
+          activeTreasuryId = treasuries[0]?.id ?? null;
         }
+        return { ...merged, treasuries, activeTreasuryId };
       },
     },
   ),
 );
+
+const ORG_OWNER_KEY = "kura-org-owner";
+
+/**
+ * Local-only mode (no backend): localStorage is the only copy of the workspace,
+ * so locking keeps it. Tag it with the signed-in user instead and wipe it when
+ * a different user signs in on this browser, or when the wallet is removed
+ * (forgetOrgWorkspace).
+ */
+export function claimOrgWorkspace(ownerId: string): void {
+  if (typeof window === "undefined") return;
+  // No wait on persist hydration: localStorage rehydrates synchronously when the
+  // store is created, so the workspace is already loaded by the time a user signs in.
+  try {
+    const previous = localStorage.getItem(ORG_OWNER_KEY);
+    if (previous && previous !== ownerId) {
+      useOrgStore.getState().resetOrgWorkspace();
+    }
+    localStorage.setItem(ORG_OWNER_KEY, ownerId);
+  } catch {
+    /* storage unavailable */
+  }
+}
+
+/**
+ * The wallet this workspace belonged to was removed from this browser: wipe the
+ * workspace and its owner tag, here and in storage.
+ */
+export function forgetOrgWorkspace(): void {
+  if (typeof window === "undefined") return;
+  useOrgStore.getState().resetOrgWorkspace();
+  try {
+    useOrgStore.persist.clearStorage();
+    localStorage.removeItem(ORG_OWNER_KEY);
+  } catch {
+    /* storage unavailable */
+  }
+}
 
 /** Active treasury entry (null if none). */
 export function selectActiveTreasury(state: {

@@ -12,6 +12,7 @@ import path from "path";
  *   BUILD_MODE=export npm run build
  */
 const BUILD_MODE = process.env.BUILD_MODE || 'standalone';
+const HAS_BACKEND = (process.env.NEXT_PUBLIC_BACKEND_URL || '').trim().length > 0;
 
 const nextConfig: NextConfig = {
   // Dynamic or static output based on BUILD_MODE
@@ -24,6 +25,11 @@ const nextConfig: NextConfig = {
   
   turbopack: {
     root: path.join(__dirname),
+    // Community edition (no backend): Privy is never used, so keep its SDK out
+    // of the bundle by resolving it to a stub. Backend builds are unaffected.
+    ...(HAS_BACKEND
+      ? {}
+      : { resolveAlias: { '@privy-io/react-auth': './app/lib/stubs/privyReactAuth.tsx' } }),
   },
   
   /**

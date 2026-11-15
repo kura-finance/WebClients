@@ -11,11 +11,44 @@ import { useAppKit } from '@reown/appkit/react';
 import { useAccount } from 'wagmi';
 import { usePlaidLink, type PlaidLinkOnSuccessMetadata } from 'react-plaid-link';
 import { usePlaidReady } from '@/context/PlaidProvider';
+import { useLoad } from '@/hooks/useLoad';
 import {
   PlaidApiError,
   createPlaidLinkToken,
   exchangePlaidPublicToken,
 } from '@/lib/plaidApi';
+
+/** Ask the backend for a Plaid Link token. Throws when none comes back. */
+async function requestPlaidLinkToken(): Promise<string> {
+  console.debug('[ConnectAccountModal] Requesting Plaid link token');
+  const result = await createPlaidLinkToken();
+  if (!result.link_token) {
+    throw new PlaidApiError('Server did not return a link token', 500);
+  }
+  console.info('[ConnectAccountModal] Link token received');
+  return result.link_token;
+}
+
+function describePlaidLinkError(error: unknown): string {
+  if (error instanceof PlaidApiError) {
+    switch (error.status) {
+      case 401:
+        return 'Your session expired. Please sign in again.';
+      case 429:
+        return 'Too many attempts. Please wait and try again.';
+      case 500:
+      case 502:
+      case 503:
+        return 'Plaid service temporarily unavailable. Please try again later.';
+      default:
+        return error.message;
+    }
+  }
+  if (error instanceof Error && error.message.includes('NetworkError')) {
+    return 'Network error. Please check your connection and try again.';
+  }
+  return 'Failed to initialize Plaid. Please try again.';
+}
 
 interface ConnectAccountModalProps {
   isOpen: boolean;
@@ -46,11 +79,12 @@ function ConnectAccountModalContent({
   const { isConnected } = useAccount();
   const { open: openAppKit } = useAppKit();
 
-  useEffect(() => {
-    if (!isOpen) {
-      setPlaidError(null);
-    }
-  }, [isOpen]);
+  // Closing the dialog clears its error, so reopening starts clean.
+  const [wasOpen, setWasOpen] = useState(isOpen);
+  if (wasOpen !== isOpen) {
+    setWasOpen(isOpen);
+    if (!isOpen) setPlaidError(null);
+  }
 
   const onPlaidSuccess = useCallback(
     async (publicToken: string, metadata: PlaidLinkOnSuccessMetadata) => {
@@ -135,42 +169,14 @@ function ConnectAccountModalContent({
 
   const fetchPlaidLinkToken = useCallback(
     async (): Promise<string | null> => {
+      // Callers clear `plaidError` themselves: the dialog on close, the Connect
+      // button before it starts. This only reports a failure.
       try {
-        setPlaidError(null);
-        console.debug('[ConnectAccountModal] Requesting Plaid link token');
-
-        const result = await createPlaidLinkToken();
-        
-        if (!result.link_token) {
-          throw new PlaidApiError('Server did not return a link token', 500);
-        }
-
-        setPlaidLinkToken(result.link_token);
-        console.info('[ConnectAccountModal] Link token received');
-        return result.link_token;
+        const token = await requestPlaidLinkToken();
+        setPlaidLinkToken(token);
+        return token;
       } catch (error) {
-        let message = 'Failed to initialize Plaid. Please try again.';
-
-        if (error instanceof PlaidApiError) {
-          switch (error.status) {
-            case 401:
-              message = 'Your session expired. Please sign in again.';
-              break;
-            case 429:
-              message = 'Too many attempts. Please wait and try again.';
-              break;
-            case 500:
-            case 502:
-            case 503:
-              message = 'Plaid service temporarily unavailable. Please try again later.';
-              break;
-            default:
-              message = error.message;
-          }
-        } else if (error instanceof Error && error.message.includes('NetworkError')) {
-          message = 'Network error. Please check your connection and try again.';
-        }
-
+        const message = describePlaidLinkError(error);
         setPlaidError(message);
         console.error('[ConnectAccountModal] Failed to fetch link token:', { error, message });
         return null;
@@ -179,10 +185,19 @@ function ConnectAccountModalContent({
     [setPlaidLinkToken]
   );
 
-  useEffect(() => {
-    if (!isOpen || linkToken) return;
-    void fetchPlaidLinkToken();
-  }, [fetchPlaidLinkToken, isOpen, linkToken]);
+  // Fetch the link token as soon as the dialog opens, so Connect is instant.
+  const linkTokenPrefetch = useLoad({
+    key: ['plaid', 'link-token'],
+    load: async () => {
+      const token = await requestPlaidLinkToken();
+      setPlaidLinkToken(token);
+      return token;
+    },
+    errorMessage: 'Failed to initialize Plaid. Please try again.',
+    describeError: describePlaidLinkError,
+    enabled: isOpen && !linkToken,
+  });
+  const shownError = plaidError ?? (isOpen && !linkToken ? linkTokenPrefetch.error : null);
 
   const handlePlaidConnect = async () => {
     setPlaidError(null);
@@ -302,9 +317,9 @@ function ConnectAccountModalContent({
             <div className="p-6 space-y-4 relative z-10">
               {authToken ? (
                 <>
-                  {plaidError ? (
+                  {shownError ? (
                     <div className="rounded-xl border border-[var(--kura-error-border)] bg-[var(--kura-error-bg)] px-3 py-2 text-xs text-[var(--kura-error-fg)]">
-                      {plaidError}
+                      {shownError}
                     </div>
                   ) : null}
 

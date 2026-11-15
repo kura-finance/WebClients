@@ -71,6 +71,15 @@ export function isPimlicoConfigured(): boolean {
   return env.pimlicoApiKey.length > 0;
 }
 
+/**
+ * True when Smart Wallet gas is paid in USDC (Pimlico ERC-20 paymaster — needs
+ * the API key). Otherwise UserOps use Pimlico's public bundler and the Safe pays
+ * gas in ETH.
+ */
+export function paysGasInUsdc(): boolean {
+  return isPimlicoConfigured() && env.payGasInUsdc;
+}
+
 export function isReownConfigured(): boolean {
   return env.reownProjectId.length > 0;
 }

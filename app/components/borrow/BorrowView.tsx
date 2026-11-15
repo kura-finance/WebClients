@@ -12,7 +12,7 @@ import {
   type MorphoMarket,
 } from "@/lib/morphoApi";
 import { useHomeWallet } from "@/hooks/useHomeWallet";
-import PrivyEoaSync from "@/components/wallet/PrivyEoaSync";
+import SignerEoaSync from "@/components/wallet/SignerEoaSync";
 import { PORTFOLIO_TOKENS } from "@/lib/portfolioTokens";
 import { cryptoLogoUrl } from "@/lib/assetLogos";
 import { Button } from "@/components/ui/button";
@@ -37,7 +37,7 @@ function marketLogo(market: MorphoMarket): { src: string | null; color: string }
     (t) => t.symbol.toLowerCase() === symbol.toLowerCase(),
   );
   return {
-    src: cryptoLogoUrl(symbol),
+    src: cryptoLogoUrl(symbol) ?? market.collateralAsset.logoURI ?? null,
     color: token?.color ?? "#6366F1",
   };
 }
@@ -85,7 +85,7 @@ export default function BorrowView() {
 
   return (
     <DashboardPage>
-      <PrivyEoaSync onEoa={wallet.applyEoaAddress} persistedEoa={wallet.record.walletAddress} />
+      <SignerEoaSync onEoa={wallet.applyEoaAddress} persistedEoa={wallet.record.walletAddress} />
       <PageHeader
         eyebrow="Market"
         title="Borrow"

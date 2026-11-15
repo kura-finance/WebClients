@@ -11,7 +11,7 @@ import {
   type MorphoVault,
 } from "@/lib/morphoApi";
 import { useHomeWallet } from "@/hooks/useHomeWallet";
-import PrivyEoaSync from "@/components/wallet/PrivyEoaSync";
+import SignerEoaSync from "@/components/wallet/SignerEoaSync";
 import { PORTFOLIO_TOKENS } from "@/lib/portfolioTokens";
 import { cryptoLogoUrl } from "@/lib/assetLogos";
 import { Button } from "@/components/ui/button";
@@ -31,7 +31,7 @@ function vaultAssetLogo(vault: MorphoVault): { src: string | null; color: string
     (t) => t.symbol.toLowerCase() === vault.assetSymbol.toLowerCase(),
   );
   return {
-    src: cryptoLogoUrl(vault.assetSymbol),
+    src: cryptoLogoUrl(vault.assetSymbol) ?? vault.assetLogoUrl ?? null,
     color: token?.color ?? "#6366F1",
   };
 }
@@ -71,7 +71,7 @@ export default function EarnView() {
 
   return (
     <DashboardPage>
-      <PrivyEoaSync onEoa={wallet.applyEoaAddress} persistedEoa={wallet.record.walletAddress} />
+      <SignerEoaSync onEoa={wallet.applyEoaAddress} persistedEoa={wallet.record.walletAddress} />
       <PageHeader
         eyebrow="Market"
         title="Earn"

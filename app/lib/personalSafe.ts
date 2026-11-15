@@ -19,6 +19,8 @@ import { base } from "viem/chains";
 import { toSafeSmartAccount } from "permissionless/accounts";
 import { env } from "@/config/env";
 import type { EthereumProvider } from "@/lib/smartAccountSend";
+import { signerCopy } from "@/lib/signer/copy";
+import { PERSONAL_SAFE_CACHE_KEY } from "@/lib/localWallet/store";
 
 /** Personal Smart Wallet uses the default salt (0). Treasury uses 1. */
 export const PERSONAL_SAFE_SALT_NONCE = BigInt(0);
@@ -45,7 +47,7 @@ async function buildPersonalAccount(eip1193Provider: EthereumProvider) {
     method: "eth_accounts",
   })) as string[];
   const eoaAddress = accounts[0] as `0x${string}` | undefined;
-  if (!eoaAddress) throw new Error("No Privy wallet available. Sign in again and retry.");
+  if (!eoaAddress) throw new Error(signerCopy.noWallet);
 
   try {
     await eip1193Provider.request({
@@ -74,10 +76,41 @@ async function buildPersonalAccount(eip1193Provider: EthereumProvider) {
   return { account, eoaAddress, publicClient };
 }
 
-/** Counterfactual Smart Wallet address for the current Privy EOA. */
+/** Counterfactual Smart Wallet address for the current signer EOA. */
 export async function computePersonalSafeAddress(
   eip1193Provider: EthereumProvider,
 ): Promise<`0x${string}`> {
   const { account } = await buildPersonalAccount(eip1193Provider);
   return getAddress(account.address);
+}
+
+const ADDRESS_RE = /^0x[a-fA-F0-9]{40}$/;
+
+/**
+ * Last Smart Wallet address derived for `eoaAddress` in this browser, or null.
+ * Lets the dashboard show the address right away and while the RPC is
+ * unreachable; callers still re-derive it and prefer the fresh result.
+ */
+export function readCachedPersonalSafe(eoaAddress: string): `0x${string}` | null {
+  try {
+    const raw = localStorage.getItem(PERSONAL_SAFE_CACHE_KEY);
+    if (!raw) return null;
+    const cached = JSON.parse(raw) as { eoa?: unknown; sca?: unknown };
+    if (typeof cached.eoa !== "string" || typeof cached.sca !== "string") return null;
+    if (cached.eoa.toLowerCase() !== eoaAddress.toLowerCase()) return null;
+    return ADDRESS_RE.test(cached.sca) ? (cached.sca as `0x${string}`) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function writeCachedPersonalSafe(eoaAddress: string, scaAddress: string): void {
+  try {
+    localStorage.setItem(
+      PERSONAL_SAFE_CACHE_KEY,
+      JSON.stringify({ eoa: eoaAddress, sca: scaAddress }),
+    );
+  } catch {
+    /* storage unavailable — the address is simply derived again next time */
+  }
 }

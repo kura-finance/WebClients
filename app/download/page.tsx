@@ -53,7 +53,7 @@ export default function DownloadPage() {
                 alt="Kura"
                 width={88}
                 height={88}
-                className="mx-auto rounded-[22px] shadow-[0_20px_50px_rgba(18,19,26,0.12)]"
+                className="mx-auto rounded-[22px] shadow-[0_20px_50px_rgba(18,19,26,0.12)] dark:invert"
               />
               <div>
                 <h1 className="font-display text-4xl tracking-tight text-[var(--kura-text)] mb-3">
@@ -103,7 +103,7 @@ export default function DownloadPage() {
                 alt="Kura"
                 width={88}
                 height={88}
-                className="mx-auto rounded-[22px] shadow-[0_20px_50px_rgba(18,19,26,0.12)]"
+                className="mx-auto rounded-[22px] shadow-[0_20px_50px_rgba(18,19,26,0.12)] dark:invert"
               />
               <div>
                 <h1 className="font-display text-4xl tracking-tight mb-3">Download Kura</h1>
@@ -145,7 +145,7 @@ export default function DownloadPage() {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="rounded-2xl border border-[var(--kura-border)] bg-[var(--kura-surface)] p-8 text-center space-y-5">
-                  <Image src="/logo.webp" alt="Kura iOS" width={72} height={72} className="mx-auto rounded-2xl" />
+                  <Image src="/logo.webp" alt="Kura iOS" width={72} height={72} className="mx-auto rounded-2xl dark:invert" />
                   <div>
                     <h2 className="text-xl font-semibold mb-1">iOS</h2>
                     <p className="text-sm text-[var(--kura-text-secondary)]">iPhone and iPad</p>
@@ -161,7 +161,7 @@ export default function DownloadPage() {
                 </div>
 
                 <div className="rounded-2xl border border-[var(--kura-border)] bg-[var(--kura-surface)] p-8 text-center space-y-5">
-                  <Image src="/logo.webp" alt="Kura Android" width={72} height={72} className="mx-auto rounded-2xl" />
+                  <Image src="/logo.webp" alt="Kura Android" width={72} height={72} className="mx-auto rounded-2xl dark:invert" />
                   <div>
                     <h2 className="text-xl font-semibold mb-1">Android</h2>
                     <p className="text-sm text-[var(--kura-text-secondary)]">Phones and tablets</p>

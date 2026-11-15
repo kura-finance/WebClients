@@ -1,42 +1,20 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
 import {
   listBorrowMorphoMarkets,
   pickMarketsByCollateral,
   type MorphoMarket,
 } from "@/lib/morphoApi";
+import { useLoad } from "@/hooks/useLoad";
+
+const NO_MARKETS: MorphoMarket[] = [];
 
 export function useMorphoBorrowMarkets() {
-  const [markets, setMarkets] = useState<MorphoMarket[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { data, loading, refreshing, error, refresh } = useLoad({
+    key: ["morpho", "borrow-markets"],
+    load: async () => pickMarketsByCollateral(await listBorrowMorphoMarkets()),
+    errorMessage: "Failed to load Morpho borrow markets",
+  });
 
-  const load = useCallback(async (isRefresh = false) => {
-    if (isRefresh) setRefreshing(true);
-    else setLoading(true);
-    setError(null);
-    try {
-      const next = await listBorrowMorphoMarkets();
-      setMarkets(pickMarketsByCollateral(next));
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load Morpho borrow markets");
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void load(false);
-  }, [load]);
-
-  return {
-    markets,
-    loading,
-    refreshing,
-    error,
-    refresh: () => load(true),
-  };
+  return { markets: data ?? NO_MARKETS, loading, refreshing, error, refresh };
 }

@@ -14,12 +14,12 @@ Related: [environment template](../.env.example) · [architecture](architecture.
 |------|--------|
 | Node.js **24** | Matches the production Dockerfile |
 | npm | `npm ci --legacy-peer-deps` in Docker |
-| A **backend** (`backendserver`) | Auth, Treasuries, TrackFi, Stripe, passkeys, Dinari |
-| Privy app | Login + embedded EOA |
-| Reown project | External wallet connect |
+| A **backend** (`backendserver`) — optional | Treasuries sync, TrackFi, bank transfers, Stripe, passkeys, Dinari |
+| Privy app — backend mode only | Login + embedded EOA |
+| Reown project — backend mode only | External wallet connect (TrackFi) |
 | GCP project (production) | Artifact Registry / GCR + Cloud Run |
 
-Full TrackFi, Treasuries persistence, billing, passkeys, and tokenized stocks require a correctly configured backend. On-chain Earn / Borrow / Approvals can still run with Privy, Base RPC, and Pimlico alone.
+Full TrackFi, server-side Treasuries persistence, bank transfers, billing, passkeys, and tokenized stocks require a correctly configured backend. With `NEXT_PUBLIC_BACKEND_URL` empty the app runs with a Base RPC alone (a Pimlico key is optional: without one, Smart Wallet gas is paid in ETH through Pimlico's public bundler) — no Privy, no account: the user's key lives in a password-encrypted vault in their browser. Available: Smart Wallet, Treasury (browser-local list), Approvals, Team, Report, Earn, Borrow, Markets. Serve it over HTTPS (WebCrypto needs a secure context) and treat the deployed bundle as part of the wallet: whoever can change it can take users' keys.
 
 ---
 
@@ -31,7 +31,7 @@ cp .env.example .env.local   # fill your keys
 npm run dev
 ```
 
-App origin defaults to `http://localhost:3000`. Point `NEXT_PUBLIC_BACKEND_URL` at a running API (example: `http://localhost:8080`).
+App origin defaults to `http://localhost:3000`. Leave `NEXT_PUBLIC_BACKEND_URL` empty for the on-chain-only app, or point it at a running API (example: `http://localhost:8080`) to enable the backend features.
 
 Checks:
 
@@ -61,16 +61,16 @@ Publishable keys are visible to every user of that build. Treat leaks as rotatio
 
 | Variable | Purpose |
 |----------|---------|
-| `NEXT_PUBLIC_BACKEND_URL` | Kura API (no trailing slash) |
+| `NEXT_PUBLIC_BACKEND_URL` | Kura API (no trailing slash). Optional — empty disables backend features |
 | `NEXT_PUBLIC_APP_URL` | Web origin (CORS, CSP, WebAuthn, Privy) |
-| `NEXT_PUBLIC_PRIVY_APP_ID` | Login |
-| `NEXT_PUBLIC_REOWN_PROJECT_ID` | Reown AppKit |
+| `NEXT_PUBLIC_PRIVY_APP_ID` | Login — backend mode only (unused without a backend) |
+| `NEXT_PUBLIC_REOWN_PROJECT_ID` | Reown AppKit — backend mode only |
 
 ### On-chain product
 
 | Variable | Purpose |
 |----------|---------|
-| `NEXT_PUBLIC_PIMLICO_API_KEY` | Smart Wallet UserOps (Transfer, Earn, Borrow, Markets) |
+| `NEXT_PUBLIC_PIMLICO_API_KEY` | Smart Wallet UserOps (Transfer, Earn, Borrow, Markets) with gas in USDC. Optional: without it the public Pimlico bundler is used and gas is paid in ETH |
 | `NEXT_PUBLIC_ALCHEMY_API_KEY` or `NEXT_PUBLIC_BASE_RPC_URL` | Base RPC (public `mainnet.base.org` rate-limits) |
 | `NEXT_PUBLIC_PAY_GAS_IN_USDC` | Pay UserOp gas in USDC (`true` by default) |
 | `NEXT_PUBLIC_LIFI_INTEGRATOR` | Li.Fi integrator id. Optional — hosted prod sets none |
@@ -82,7 +82,7 @@ Publishable keys are visible to every user of that build. Treat leaks as rotatio
 | Variable | Purpose |
 |----------|---------|
 | `NEXT_PUBLIC_API_URL` | CSP `connect-src` API origin (defaults to `https://api.kura-finance.com`) |
-| `NEXT_PUBLIC_LOGODEV_TOKEN` | Ticker icons |
+| `NEXT_PUBLIC_LOGODEV_TOKEN` | Stock icons (token icons work without it) |
 | `NEXT_PUBLIC_STRIPE_PRICE_*` | Plan price IDs shown in billing UI |
 
 Backend-only secrets (Plaid, Stripe secret keys, DB, JWT) never belong in this repo.
@@ -132,6 +132,8 @@ The deploy workflow **does not run on forks**. It only runs when `github.reposit
 
 ### GitHub secrets
 
+Every `NEXT_PUBLIC_*` value is inlined at build time, so a secret only reaches the site if the workflow passes it as a `--build-arg`. Without `NEXT_PUBLIC_BACKEND_URL` the build is the on-chain site (no Kura backend, Privy, Reown or Stripe), whatever is set on Cloud Run.
+
 | Secret | Purpose |
 |--------|---------|
 | `GCP_PROJECT_ID` | GCP project (prefer the **Variable** `GCP_PROJECT_ID`; the Secret is a legacy fallback) |
@@ -143,7 +145,7 @@ The deploy workflow **does not run on forks**. It only runs when `github.reposit
 | `NEXT_PUBLIC_REOWN_PROJECT_ID` | Reown |
 | `NEXT_PUBLIC_ALCHEMY_API_KEY` | Base RPC |
 | `NEXT_PUBLIC_BASE_RPC_URL` | Optional explicit RPC URL |
-| `NEXT_PUBLIC_LOGODEV_TOKEN` | Optional icons |
+| `NEXT_PUBLIC_LOGODEV_TOKEN` | Optional stock icons |
 | `NEXT_PUBLIC_PIMLICO_API_KEY` | Smart Wallet |
 | `NEXT_PUBLIC_PAY_GAS_IN_USDC` | Optional |
 | `NEXT_PUBLIC_LIFI_API_KEY` | Optional |
@@ -188,7 +190,7 @@ PR / push **CI** (lint + typecheck) lives in [`.github/workflows/ci.yml`](../.gi
 |---------|----------------|
 | Login works locally, not prod | Wrong Privy App ID at build, or origin not allowlisted |
 | `/api/*` 404 | Wrong `NEXT_PUBLIC_BACKEND_URL` at build |
-| Smart Wallet actions fail | Missing Pimlico build-arg |
+| Smart Wallet actions fail | No ETH in the Safe when there is no Pimlico key (gas is paid in ETH), or a wrong Pimlico build-arg |
 | Morpho empty | Network / CSP to `api.morpho.org` |
 | Approvals stuck | Safe undeployed / EOA not owner / TX Service blocked |
 | Stale env in prod | Runtime env changed without rebuild |

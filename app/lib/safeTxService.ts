@@ -1,6 +1,7 @@
 /**
- * Safe Transaction Service (Base) — pending multisig queue for Treasury.
- * https://safe-transaction-base.safe.global
+ * Safe Transaction Service (Base) — pending multisig queue for Treasury, and
+ * the transfer history of every Safe (see lib/chain/walletTransfers.ts).
+ * https://api.safe.global/tx-service/base
  */
 
 import {
@@ -13,8 +14,12 @@ import {
 } from "viem";
 import { USDC_BASE } from "@/lib/baseChain";
 
-export const SAFE_TX_SERVICE_BASE =
-  "https://safe-transaction-base.safe.global/api";
+/**
+ * The service moved here from safe-transaction-base.safe.global, which now
+ * answers with a redirect to this host.
+ */
+export const SAFE_TX_SERVICE_URL = "https://api.safe.global/tx-service/base";
+export const SAFE_TX_SERVICE_BASE = `${SAFE_TX_SERVICE_URL}/api`;
 
 const ZERO = "0x0000000000000000000000000000000000000000" as const;
 

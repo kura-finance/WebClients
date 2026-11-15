@@ -17,6 +17,7 @@ import {
   signSafeTx,
 } from "@/lib/safeTxService";
 import { isSafeOwner, normalizeAddress } from "@/lib/safeOwners";
+import { signerCopy } from "@/lib/signer/copy";
 
 export async function proposeTreasuryCalls(params: {
   eip1193Provider: EthereumProvider;
@@ -30,7 +31,7 @@ export async function proposeTreasuryCalls(params: {
     method: "eth_accounts",
   })) as string[];
   const account = (accounts[0] ?? params.eoaAddress) as `0x${string}`;
-  if (!account) throw new Error("No Privy wallet available. Sign in again.");
+  if (!account) throw new Error(signerCopy.noWalletShort);
 
   try {
     await params.eip1193Provider.request({
@@ -47,7 +48,7 @@ export async function proposeTreasuryCalls(params: {
     throw new Error("Treasury Safe is not deployed on Base yet. Activate it under Treasury first.");
   }
   if (!isSafeOwner(info.owners as `0x${string}`[], account)) {
-    throw new Error("Your Privy EOA is not a Treasury Safe owner — only owners can propose.");
+    throw new Error(`Your ${signerCopy.eoa} is not a Treasury Safe owner — only owners can propose.`);
   }
 
   const walletClient = createWalletClient({

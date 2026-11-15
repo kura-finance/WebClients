@@ -23,6 +23,7 @@ import {
   PanelHeader,
 } from "@/components/dashboard/PageShell";
 import CashFlowChartCard from "@/dashboard/_components/trackfi/CashFlowChartCard";
+import { features } from "@/config/features";
 
 type Period = "mtd" | "last_month" | "qtd" | "ytd";
 
@@ -157,7 +158,7 @@ export default function ReportView() {
       ["Inflow", String(inflow)],
       ["Outflow", String(outflow)],
       ["Net", String(inflow - outflow)],
-      ["Connected bank cash", String(bankCash)],
+      ...(features.trackFi ? [["Connected bank cash", String(bankCash)]] : []),
     ];
     downloadCsv(`kura-statement-${period}.csv`, rows);
   };
@@ -250,7 +251,9 @@ export default function ReportView() {
         </Panel>
       </section>
 
-      <CashFlowChartCard totalBalance={bankCash} accountCount={bankAccounts.length} days={30} />
+      {features.trackFi ? (
+        <CashFlowChartCard totalBalance={bankCash} accountCount={bankAccounts.length} days={30} />
+      ) : null}
 
       <section className="mt-6">
         <Panel padding="md">

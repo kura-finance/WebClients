@@ -24,6 +24,8 @@ export interface MorphoVault {
   assetSymbol: string;
   assetAddress: string;
   assetDecimals: number;
+  /** Morpho's own logo for the asset (an SVG on cdn.morpho.org). */
+  assetLogoUrl?: string | null;
   netApy: number;
   totalAssetsUsd: number;
   fee: number;
@@ -36,7 +38,7 @@ interface GqlVaultItem {
   address: string;
   name: string;
   symbol: string;
-  asset: { symbol: string; address: string; decimals: number };
+  asset: { symbol: string; address: string; decimals: number; logoURI?: string | null };
   state: {
     netApy: number;
     totalAssetsUsd: number;
@@ -50,7 +52,7 @@ interface GqlVaultV2Item {
   address: string;
   name: string;
   symbol: string;
-  asset: { symbol: string; address: string; decimals: number };
+  asset: { symbol: string; address: string; decimals: number; logoURI?: string | null };
   netApy: number | null;
   totalAssetsUsd: number | null;
   performanceFee: number | null;
@@ -82,6 +84,7 @@ function mapVault(item: GqlVaultItem): MorphoVault {
     assetSymbol: item.asset.symbol,
     assetAddress: item.asset.address,
     assetDecimals: item.asset.decimals,
+    assetLogoUrl: item.asset.logoURI ?? null,
     netApy: item.state?.netApy ?? 0,
     totalAssetsUsd: item.state?.totalAssetsUsd ?? 0,
     fee: item.state?.fee ?? 0,
@@ -99,6 +102,7 @@ function mapVaultV2(item: GqlVaultV2Item): MorphoVault {
     assetSymbol: item.asset.symbol,
     assetAddress: item.asset.address,
     assetDecimals: item.asset.decimals,
+    assetLogoUrl: item.asset.logoURI ?? null,
     netApy: item.netApy ?? 0,
     totalAssetsUsd: item.totalAssetsUsd ?? 0,
     fee: item.performanceFee ?? 0,
@@ -121,7 +125,7 @@ const LIST_VAULTS_QUERY = `
         address
         name
         symbol
-        asset { symbol address decimals }
+        asset { symbol address decimals logoURI }
         state { netApy totalAssetsUsd fee sharePriceUsd }
         metadata { description image }
       }
@@ -135,7 +139,7 @@ const VAULT_V2_BY_ADDRESS_QUERY = `
       address
       name
       symbol
-      asset { symbol address decimals }
+      asset { symbol address decimals logoURI }
       netApy
       totalAssetsUsd
       performanceFee
@@ -257,6 +261,7 @@ interface GqlVaultV2Detail {
     symbol: string;
     address: string;
     decimals: number;
+    logoURI?: string | null;
     yield: { apr: number } | null;
   };
   totalAssetsUsd: number | null;
@@ -281,6 +286,7 @@ const VAULT_V2_DETAIL_QUERY = `
         symbol
         address
         decimals
+        logoURI
         yield { apr }
       }
       totalAssetsUsd
@@ -480,6 +486,7 @@ function mapVaultV2Detail(item: GqlVaultV2Detail): MorphoVaultDetail {
     assetSymbol: item.asset.symbol,
     assetAddress: item.asset.address,
     assetDecimals: item.asset.decimals,
+    assetLogoUrl: item.asset.logoURI ?? null,
     netApy,
     totalAssetsUsd: item.totalAssetsUsd ?? 0,
     fee: item.performanceFee ?? 0,
@@ -550,6 +557,8 @@ export interface MorphoMarketAsset {
   symbol: string;
   address: string;
   decimals: number;
+  /** Morpho's own logo for the asset (an SVG on cdn.morpho.org). */
+  logoURI?: string | null;
 }
 
 export interface MorphoMarket {
@@ -598,8 +607,8 @@ const LIST_MARKETS_QUERY = `
       items {
         marketId
         lltv
-        loanAsset { symbol address decimals }
-        collateralAsset { symbol address decimals }
+        loanAsset { symbol address decimals logoURI }
+        collateralAsset { symbol address decimals logoURI }
         oracle { address }
         irmAddress
         state {
@@ -732,8 +741,8 @@ const MARKET_BY_ID_QUERY = `
     marketById(marketId: $marketId, chainId: $chainId) {
       marketId
       lltv
-      loanAsset { symbol address decimals }
-      collateralAsset { symbol address decimals }
+      loanAsset { symbol address decimals logoURI }
+      collateralAsset { symbol address decimals logoURI }
       oracle { address }
       irmAddress
       state {

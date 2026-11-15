@@ -4,21 +4,27 @@
  *   GET  /api/wallet        → { walletAddress, scaAddress }
  *   PUT  /api/wallet/sca    → { scaAddress }
  *   PUT  /api/wallet/eoa    → { walletAddress }
+ *
+ * Without a backend there is no wallet record: reads return an empty record and
+ * saves are no-ops. Addresses then come from the signer (EOA) and local derivation
+ * (personal Safe — see lib/personalSafe.ts) via useWalletSessionStore.
  */
 
 import { ApiError } from "./errorHandler";
 import { requestJson } from "./httpClient";
+import { features } from "@/config/features";
 
 const apiName = "WalletApi";
 
 export interface WalletRecord {
-  /** Privy embedded EOA address */
+  /** Signer EOA address (Privy embedded wallet, or the browser wallet) */
   walletAddress: string | null;
   /** Smart Wallet (ERC-4337 Safe SCA) address on Base */
   scaAddress: string | null;
 }
 
 export async function fetchWalletRecord(): Promise<WalletRecord> {
+  if (!features.backend) return { walletAddress: null, scaAddress: null };
   try {
     return await requestJson<WalletRecord>("/api/wallet", { method: "GET" }, apiName);
   } catch (error) {
@@ -30,6 +36,7 @@ export async function fetchWalletRecord(): Promise<WalletRecord> {
 }
 
 export async function saveScaAddress(scaAddress: string): Promise<void> {
+  if (!features.backend) return;
   await requestJson<WalletRecord>(
     "/api/wallet/sca",
     { method: "PUT", body: JSON.stringify({ scaAddress }) },
@@ -38,6 +45,7 @@ export async function saveScaAddress(scaAddress: string): Promise<void> {
 }
 
 export async function saveEoaAddress(walletAddress: string): Promise<void> {
+  if (!features.backend) return;
   await requestJson<WalletRecord>(
     "/api/wallet/eoa",
     { method: "PUT", body: JSON.stringify({ walletAddress }) },

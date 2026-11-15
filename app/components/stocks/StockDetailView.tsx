@@ -1,9 +1,8 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Loader2 } from "lucide-react";
-import { useWallets } from "@privy-io/react-auth";
 import {
   findStockMeta,
   formatStockPrice,
@@ -12,6 +11,7 @@ import {
 import { fetchCuratedStockQuotes } from "@/lib/stockCatalog";
 import { stockLogoUrl } from "@/lib/assetLogos";
 import { fetchUsdcBalance } from "@/lib/baseChain";
+import { useLoad } from "@/hooks/useLoad";
 import {
   connectWallet,
   createKycLink,
@@ -27,8 +27,9 @@ import {
   signMessageFromSafe,
   signTypedDataFromSafe,
 } from "@/lib/smartAccountSend";
-import { isPimlicoConfigured, isPrivyConfigured } from "@/config/env";
-import PrivyEoaSync from "@/components/wallet/PrivyEoaSync";
+import { isSignerConfigured, useSignerWallet } from "@/lib/signer";
+import { signerCopy } from "@/lib/signer/copy";
+import SignerEoaSync from "@/components/wallet/SignerEoaSync";
 import TradingAccountPicker, {
   useTradingAccount,
 } from "@/components/wallet/TradingAccountPicker";
@@ -61,9 +62,7 @@ export default function StockDetailView({ symbol }: StockDetailViewProps) {
     treasury,
   } = useTradingAccount();
   const { refresh, applyEoaAddress, record } = personal;
-  const { wallets } = useWallets();
-  const privyWallet =
-    wallets.find((w) => w.walletClientType === "privy") ?? wallets[0] ?? null;
+  const signerWallet = useSignerWallet();
 
   const [quote, setQuote] = useState<StockQuoteRow | null>(null);
   const [side, setSide] = useState<"buy" | "sell">("buy");
@@ -71,9 +70,8 @@ export default function StockDetailView({ symbol }: StockDetailViewProps) {
   const [loading, setLoading] = useState(true);
   const [stockId, setStockId] = useState<string | null>(null);
   const [dinariQuote, setDinariQuote] = useState<{ bid?: number; ask?: number } | null>(null);
-  const [entity, setEntity] = useState<DinariEntity | null>(null);
-  const [walletLinked, setWalletLinked] = useState(false);
-  const [usdcBal, setUsdcBal] = useState(0);
+  // Smart Wallet linked to Dinari from this page, before the next gate check confirms it.
+  const [linkedHere, setLinkedHere] = useState<string | null>(null);
   const [isBusy, setIsBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -139,42 +137,42 @@ export default function StockDetailView({ symbol }: StockDetailViewProps) {
     };
   }, [stockId]);
 
-  const refreshGate = useCallback(async () => {
-    try {
-      const ent = await getEntity();
-      setEntity(ent);
-      if (ent.canTransact && scaAddress) {
-        const acct = await getAccount();
-        const linked =
-          !!acct.walletAddress &&
-          acct.walletAddress.toLowerCase() === scaAddress.toLowerCase();
-        setWalletLinked(linked);
-      }
-    } catch {
-      setEntity(null);
-      setWalletLinked(false);
-    }
-  }, [scaAddress]);
+  // Dinari gate: KYC status, and whether this Smart Wallet is the linked account.
+  const gateQuery = useLoad({
+    key: ["dinari", "gate", scaAddress?.toLowerCase() ?? null],
+    load: async () => {
+      const entity = await getEntity();
+      if (!entity.canTransact || !scaAddress) return { entity, walletLinked: false };
+      const account = await getAccount();
+      return {
+        entity,
+        walletLinked:
+          !!account.walletAddress &&
+          account.walletAddress.toLowerCase() === scaAddress.toLowerCase(),
+      };
+    },
+    errorMessage: "Failed to load Dinari account",
+  });
+  // A failed check reads as "not verified, not linked".
+  const gate = gateQuery.error ? undefined : gateQuery.data;
+  const entity: DinariEntity | null = gate?.entity ?? null;
+  const walletLinked =
+    !gateQuery.error && (gate?.walletLinked === true || (!!scaAddress && linkedHere === scaAddress));
 
-  useEffect(() => {
-    void refreshGate();
-  }, [refreshGate]);
-
-  useEffect(() => {
-    if (!scaAddress) {
-      setUsdcBal(0);
-      return;
-    }
-    void fetchUsdcBalance(scaAddress as `0x${string}`)
-      .then(setUsdcBal)
-      .catch(() => setUsdcBal(0));
-  }, [scaAddress]);
+  const usdcQuery = useLoad({
+    key: ["usdc-balance", scaAddress?.toLowerCase() ?? null],
+    load: () => fetchUsdcBalance(scaAddress as `0x${string}`),
+    errorMessage: "Failed to load USDC balance",
+    enabled: Boolean(scaAddress),
+  });
+  const usdcBal = scaAddress && !usdcQuery.error ? (usdcQuery.data ?? 0) : 0;
+  const refreshUsdc = usdcQuery.refresh;
 
   const ensureWalletLinked = async () => {
-    if (!scaAddress || !privyWallet) throw new Error("Smart Wallet / Privy not ready.");
+    if (!scaAddress || !signerWallet) throw new Error(signerCopy.smartWalletNotReady);
     if (walletLinked) return;
     const nonce = await getWalletNonce(scaAddress);
-    const provider = (await privyWallet.getEthereumProvider()) as {
+    const provider = (await signerWallet.getEthereumProvider()) as {
       request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
     };
     const signature = await signMessageFromSafe({
@@ -188,7 +186,7 @@ export default function StockDetailView({ symbol }: StockDetailViewProps) {
       nonce: nonce.nonce,
       signature,
     });
-    setWalletLinked(true);
+    setLinkedHere(scaAddress);
   };
 
   const handleKyc = async () => {
@@ -208,7 +206,7 @@ export default function StockDetailView({ symbol }: StockDetailViewProps) {
   const handleTrade = async () => {
     setError(null);
     setSuccess(null);
-    if (!meta || !stockId || !scaAddress || !privyWallet) return;
+    if (!meta || !stockId || !scaAddress || !signerWallet) return;
     if (isTreasury) {
       setError("Stock orders use Smart Wallet signing. Switch to Smart Wallet to trade.");
       return;
@@ -225,7 +223,7 @@ export default function StockDetailView({ symbol }: StockDetailViewProps) {
     setIsBusy(true);
     try {
       await ensureWalletLinked();
-      const provider = (await privyWallet.getEthereumProvider()) as {
+      const provider = (await signerWallet.getEthereumProvider()) as {
         request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
       };
       const result = await placeDinariOrder({
@@ -244,8 +242,7 @@ export default function StockDetailView({ symbol }: StockDetailViewProps) {
       setSuccess(`Order ${result.status}${result.orderId ? ` · ${result.orderId}` : ""}`);
       setAmount("");
       await refresh();
-      const bal = await fetchUsdcBalance(scaAddress as `0x${string}`);
-      setUsdcBal(bal);
+      await refreshUsdc();
     } catch (e) {
       setError(errMessage(e));
     } finally {
@@ -275,16 +272,15 @@ export default function StockDetailView({ symbol }: StockDetailViewProps) {
   const canTrade =
     !!stockId &&
     !!scaAddress &&
-    !!privyWallet &&
-    isPimlicoConfigured() &&
-    isPrivyConfigured &&
+    !!signerWallet &&
+    isSignerConfigured &&
     !!entity?.canTransact &&
     numericAmount > 0 &&
     !isBusy;
 
   return (
     <DashboardPage className="!max-w-none px-4 pb-10 pt-4 sm:px-5 lg:px-6">
-      <PrivyEoaSync onEoa={applyEoaAddress} persistedEoa={record.walletAddress} />
+      <SignerEoaSync onEoa={applyEoaAddress} persistedEoa={record.walletAddress} />
       <Link
         href="/dashboard/rwa"
         className="mb-3 inline-flex items-center gap-1.5 text-sm font-medium text-[var(--kura-text-secondary)] hover:text-[var(--kura-text)]"

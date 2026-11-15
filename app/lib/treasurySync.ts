@@ -5,6 +5,8 @@
  *   - Daily ops: POST / PATCH / DELETE / PUT active (never PUT / except migration)
  *   - After mutate: apply server response (or GET) as source of truth
  *   - localStorage is cache only when remote is unavailable
+ *   - No backend configured: remote is skipped entirely and localStorage is
+ *     the source of truth (no network calls)
  *   - Dashboard membership gate handles tier; 403 from API is surfaced
  */
 
@@ -21,6 +23,7 @@ import {
   type CreateTreasuryInput,
 } from "@/lib/treasuryApi";
 import { useOrgStore, type OrgTreasury } from "@/store/useOrgStore";
+import { features } from "@/config/features";
 
 let remoteAvailable: boolean | null = null;
 let hydratePromise: Promise<void> | null = null;
@@ -37,6 +40,7 @@ function markUnavailable(error: unknown): boolean {
 }
 
 async function withRemote<T>(fn: () => Promise<T>): Promise<T | null> {
+  if (!features.backend) return null;
   if (remoteAvailable === false) return null;
   try {
     const result = await fn();
@@ -72,6 +76,8 @@ function waitForOrgPersistHydration(): Promise<void> {
  * If server empty and local has data → one-shot PUT migrate (only safe use of PUT /).
  */
 export async function hydrateTreasuryWorkspace(): Promise<void> {
+  // No backend: the persisted local workspace is already the source of truth.
+  if (!features.backend) return;
   if (hydratePromise) return hydratePromise;
   hydratePromise = (async () => {
     await waitForOrgPersistHydration();

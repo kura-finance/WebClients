@@ -12,28 +12,33 @@ import {
   RefreshCw,
   ShieldCheck,
 } from "lucide-react";
-import { useWallets } from "@privy-io/react-auth";
 import { useHomeWallet } from "@/hooks/useHomeWallet";
 import { useAppStore } from "@/store/useAppStore";
-import { isPimlicoConfigured, isPrivyConfigured } from "@/config/env";
-import PrivyEoaSync from "@/components/wallet/PrivyEoaSync";
+import { paysGasInUsdc } from "@/config/env";
+import { features } from "@/config/features";
+import { isSignerConfigured, useSignerWallet, type SignerWallet } from "@/lib/signer";
+import { signerCopy } from "@/lib/signer/copy";
+import SignerEoaSync from "@/components/wallet/SignerEoaSync";
 import BridgeVerifyGate from "@/components/wallet/BridgeVerifyGate";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DashboardPage } from "@/components/dashboard/PageShell";
 import { ApiError } from "@/lib/errorHandler";
-import { executeLiFiBridgeFromSafe, sendUsdcFromSafe } from "@/lib/smartAccountSend";
+import {
+  ETH_GAS_NOTICE,
+  executeLiFiBridgeFromSafe,
+  sendUsdcFromSafe,
+} from "@/lib/smartAccountSend";
 import {
   BASE_CHAIN,
   BASE_CHAIN_ID,
   SEND_CHAINS,
-  fetchBridgeQuote,
   formatBridgeFeeTotal,
   formatBridgeReceive,
   formatBridgeTime,
   type BridgeChain,
-  type LiFiBridgeQuote,
 } from "@/lib/lifiBridge";
+import { useBridgeQuote } from "@/hooks/useBridgeQuote";
 import {
   createExternalAccount,
   formatDepositFeeLabel,
@@ -75,21 +80,20 @@ function basescanTx(hash: string): string {
 export default function MakePaymentView() {
   const wallet = useHomeWallet();
   const userProfile = useAppStore((s) => s.userProfile);
-  const { wallets } = useWallets();
-  const [step, setStep] = useState<Step>("method");
+  const signerWallet = useSignerWallet();
+  // Bank payouts go through Bridge (backend). Without it, crypto is the only method.
+  const [step, setStep] = useState<Step>(features.fiatRamp ? "method" : "crypto");
 
   const balance = wallet.stableBalances.USDC ?? 0;
   const sca = wallet.scaAddress;
-  const privyWallet =
-    wallets.find((w) => w.walletClientType === "privy") ?? wallets[0] ?? null;
 
   return (
     <DashboardPage variant="wizard">
-      {isPrivyConfigured ? (
-        <PrivyEoaSync onEoa={wallet.applyEoaAddress} persistedEoa={wallet.record.walletAddress} />
+      {isSignerConfigured ? (
+        <SignerEoaSync onEoa={wallet.applyEoaAddress} persistedEoa={wallet.record.walletAddress} />
       ) : null}
 
-      {step !== "method" ? (
+      {features.fiatRamp && step !== "method" ? (
         <button
           type="button"
           onClick={() => setStep("method")}
@@ -144,16 +148,16 @@ export default function MakePaymentView() {
         <CryptoSendPanel
           balance={balance}
           scaAddress={sca}
-          privyWallet={privyWallet}
+          signerWallet={signerWallet}
           onSent={() => void wallet.refresh()}
         />
       ) : null}
 
-      {step === "bank" ? (
+      {features.fiatRamp && step === "bank" ? (
         <BankPayoutPanel
           balance={balance}
           scaAddress={sca}
-          privyWallet={privyWallet}
+          signerWallet={signerWallet}
           defaultName={userProfile.displayName}
           defaultEmail={userProfile.email}
           onSent={() => void wallet.refresh()}
@@ -193,20 +197,16 @@ function MethodRow({
   );
 }
 
-type PrivyWalletLike = {
-  getEthereumProvider: () => Promise<unknown>;
-  address?: string;
-} | null;
 
 function CryptoSendPanel({
   balance,
   scaAddress,
-  privyWallet,
+  signerWallet,
   onSent,
 }: {
   balance: number;
   scaAddress: string | null;
-  privyWallet: PrivyWalletLike;
+  signerWallet: SignerWallet | null;
   onSent: () => void;
 }) {
   const [chain, setChain] = useState<BridgeChain>(BASE_CHAIN);
@@ -215,9 +215,6 @@ function CryptoSendPanel({
   const [error, setError] = useState<string | null>(null);
   const [txHash, setTxHash] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
-  const [quote, setQuote] = useState<LiFiBridgeQuote | null>(null);
-  const [quoteError, setQuoteError] = useState<string | null>(null);
-  const [isFetchingQuote, setIsFetchingQuote] = useState(false);
   const [countdown, setCountdown] = useState(QUOTE_REFRESH_SEC);
 
   const isBridge = chain.id !== BASE_CHAIN_ID;
@@ -230,58 +227,38 @@ function CryptoSendPanel({
     numericAmount > 0 &&
     numericAmount <= balance;
 
+  const {
+    quote,
+    quoteError,
+    isQuoting: isFetchingQuote,
+    refresh: loadQuote,
+  } = useBridgeQuote(
+    canQuote && scaAddress
+      ? {
+          fromChainId: BASE_CHAIN_ID,
+          toChainId: chain.id,
+          fromAmountWei: String(Math.round(numericAmount * 1_000_000)),
+          fromAddress: scaAddress,
+          toAddress: to.trim(),
+        }
+      : null,
+  );
+
   const canSend =
     !!scaAddress &&
-    !!privyWallet &&
-    isPimlicoConfigured() &&
+    !!signerWallet &&
     isValidAddress &&
     numericAmount > 0 &&
     numericAmount <= balance &&
     !isSending &&
     (!isBridge || (!!quote && !quoteError && !isFetchingQuote));
 
-  const loadQuote = useCallback(async () => {
-    if (!canQuote || !scaAddress) {
-      setQuote(null);
-      setQuoteError(null);
-      return;
-    }
-    setIsFetchingQuote(true);
-    setQuoteError(null);
-    try {
-      const q = await fetchBridgeQuote({
-        fromChainId: BASE_CHAIN_ID,
-        toChainId: chain.id,
-        fromAmountWei: String(Math.round(numericAmount * 1_000_000)),
-        fromAddress: scaAddress,
-        toAddress: to.trim(),
-      });
-      setQuote(q);
-      setCountdown(QUOTE_REFRESH_SEC);
-    } catch (e) {
-      setQuote(null);
-      setQuoteError(errMessage(e));
-    } finally {
-      setIsFetchingQuote(false);
-    }
-  }, [canQuote, scaAddress, chain.id, numericAmount, to]);
-
-  useEffect(() => {
-    if (!isBridge) {
-      setQuote(null);
-      setQuoteError(null);
-      return;
-    }
-    if (!canQuote) {
-      setQuote(null);
-      setQuoteError(null);
-      return;
-    }
-    const debounce = window.setTimeout(() => {
-      void loadQuote();
-    }, 400);
-    return () => window.clearTimeout(debounce);
-  }, [isBridge, canQuote, loadQuote]);
+  // Every new quote restarts the countdown to the next automatic re-quote.
+  const [countdownQuote, setCountdownQuote] = useState(quote);
+  if (countdownQuote !== quote) {
+    setCountdownQuote(quote);
+    setCountdown(QUOTE_REFRESH_SEC);
+  }
 
   useEffect(() => {
     if (!isBridge || !quote || !canQuote) return;
@@ -301,15 +278,11 @@ function CryptoSendPanel({
     setError(null);
     setTxHash(null);
     if (!scaAddress) {
-      setError("No Smart Wallet found. Sign in with Privy — setup runs automatically.");
+      setError(`No Smart Wallet found. ${signerCopy.signIn} — setup runs automatically.`);
       return;
     }
-    if (!privyWallet) {
-      setError("Privy wallet not ready. Sign in again and retry.");
-      return;
-    }
-    if (!isPimlicoConfigured()) {
-      setError("Sending is not configured (missing Pimlico API key).");
+    if (!signerWallet) {
+      setError(signerCopy.walletNotReady);
       return;
     }
     if (!isValidAddress) {
@@ -331,7 +304,7 @@ function CryptoSendPanel({
 
     setIsSending(true);
     try {
-      const provider = (await privyWallet.getEthereumProvider()) as {
+      const provider = (await signerWallet.getEthereumProvider()) as {
         request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
       };
       const hash = isBridge
@@ -348,7 +321,6 @@ function CryptoSendPanel({
           });
       setTxHash(hash);
       setAmount("");
-      setQuote(null);
       onSent();
     } catch (e) {
       setError(errMessage(e));
@@ -494,10 +466,9 @@ function CryptoSendPanel({
           </div>
         ) : null}
 
-        {!isPimlicoConfigured() ? (
-          <div className="rounded-xl border border-[var(--kura-warning-border)] bg-[var(--kura-warning-bg)] px-3 py-2.5 text-xs text-[var(--kura-warning-fg)]">
-            Set <code className="font-mono">NEXT_PUBLIC_PIMLICO_API_KEY</code> to enable on-chain
-            sends from web.
+        {!paysGasInUsdc() ? (
+          <div className="rounded-xl border border-[var(--kura-border)] bg-[var(--kura-surface)] px-3 py-2.5 text-xs text-[var(--kura-text-secondary)]">
+            {ETH_GAS_NOTICE}
           </div>
         ) : null}
 
@@ -547,14 +518,14 @@ function CryptoSendPanel({
 function BankPayoutPanel({
   balance,
   scaAddress,
-  privyWallet,
+  signerWallet,
   defaultName,
   defaultEmail,
   onSent,
 }: {
   balance: number;
   scaAddress: string | null;
-  privyWallet: PrivyWalletLike;
+  signerWallet: SignerWallet | null;
   defaultName: string;
   defaultEmail: string;
   onSent: () => void;
@@ -596,9 +567,8 @@ function BankPayoutPanel({
   const numericAmount = Number(amount);
   const canSend =
     !!scaAddress &&
-    !!privyWallet &&
+    !!signerWallet &&
     !!payoutAddress?.depositAddress &&
-    isPimlicoConfigured() &&
     numericAmount > 0 &&
     numericAmount <= balance &&
     !isSending;
@@ -627,13 +597,18 @@ function BankPayoutPanel({
     }
   }, [selectedAccountId]);
 
+  // Bank payouts (Bridge) keep their hand-written loaders: the flow creates
+  // server-side payout addresses and cannot be exercised without a backend, so
+  // it was left as it is rather than rewritten untested. See TODO.md.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     if (!selectedAccount || !selectedOption || !scaAddress || !ready) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- see the note above
       setPayoutAddress(null);
       return;
     }
@@ -674,12 +649,6 @@ function BankPayoutPanel({
     };
   }, [selectedAccount, selectedOption, scaAddress, ready]);
 
-  useEffect(() => {
-    if (railsForAccount.length && !selectedRail) {
-      setSelectedRail(String(railsForAccount[0].destinationRail));
-    }
-  }, [railsForAccount, selectedRail]);
-
   const saveBank = async () => {
     setSavingBank(true);
     setError(null);
@@ -711,19 +680,15 @@ function BankPayoutPanel({
   const handleSend = async () => {
     setError(null);
     setTxHash(null);
-    if (!scaAddress || !privyWallet || !payoutAddress?.depositAddress) return;
+    if (!scaAddress || !signerWallet || !payoutAddress?.depositAddress) return;
     if (!(numericAmount > 0) || numericAmount > balance) {
       setError("Enter a valid amount within your balance.");
-      return;
-    }
-    if (!isPimlicoConfigured()) {
-      setError("Sending is not configured (missing Pimlico API key).");
       return;
     }
 
     setIsSending(true);
     try {
-      const provider = (await privyWallet.getEthereumProvider()) as {
+      const provider = (await signerWallet.getEthereumProvider()) as {
         request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
       };
       const hash = await sendUsdcFromSafe({
@@ -986,10 +951,9 @@ function BankPayoutPanel({
             </div>
           ) : null}
 
-          {!isPimlicoConfigured() ? (
-            <div className="rounded-xl border border-[var(--kura-warning-border)] bg-[var(--kura-warning-bg)] px-3 py-2.5 text-xs text-[var(--kura-warning-fg)]">
-              Set <code className="font-mono">NEXT_PUBLIC_PIMLICO_API_KEY</code> to send USDC from
-              web.
+          {!paysGasInUsdc() ? (
+            <div className="rounded-xl border border-[var(--kura-border)] bg-[var(--kura-surface)] px-3 py-2.5 text-xs text-[var(--kura-text-secondary)]">
+              {ETH_GAS_NOTICE}
             </div>
           ) : null}
 

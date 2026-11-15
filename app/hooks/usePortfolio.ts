@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef } from "react";
+import { useLoad } from "@/hooks/useLoad";
 import { fetchWalletRecord } from "@/lib/walletApi";
 import { fetchPortfolioBalances } from "@/lib/baseChain";
 import { fetchCoinGeckoPrices, type PriceMap } from "@/lib/coingeckoPrices";
@@ -12,7 +13,8 @@ import {
   type PortfolioDisplayGroup,
   type PortfolioTokenMeta,
 } from "@/lib/portfolioTokens";
-import { hasBackendUrl } from "@/config/env";
+import { features } from "@/config/features";
+import { useWalletSessionStore } from "@/store/useWalletSessionStore";
 import { isHexAddress } from "@/lib/formatDisplay";
 import {
   sumBorrowDebtsUsd,
@@ -52,100 +54,91 @@ function computePnL(holdings: PortfolioHolding[]) {
   return { todayChangeUsd, todayChangePct };
 }
 
-export function usePortfolio() {
-  const [scaAddress, setScaAddress] = useState<string | null>(null);
-  const [balances, setBalances] = useState<Record<string, number>>({});
-  const [holdings, setHoldings] = useState<PortfolioHolding[]>([]);
-  const [earnUsd, setEarnUsd] = useState(0);
-  const [loanUsd, setLoanUsd] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+interface PortfolioSnapshot {
+  scaAddress: string | null;
+  balances: Record<string, number>;
+  holdings: PortfolioHolding[];
+  earnUsd: number;
+  loanUsd: number;
+}
 
-  const load = useCallback(async (isRefresh = false) => {
-    if (!hasBackendUrl()) {
-      setLoading(false);
-      setError("Backend URL is not configured");
-      return;
-    }
+const NO_BALANCES: Record<string, number> = {};
+const NO_HOLDINGS: PortfolioHolding[] = [];
 
-    if (isRefresh) setRefreshing(true);
-    else setLoading(true);
-    setError(null);
+async function loadPortfolio(
+  localSca: string | null,
+  forcePrices: boolean,
+): Promise<PortfolioSnapshot> {
+  const wallet = await fetchWalletRecord();
+  const sca = localSca ?? wallet.scaAddress;
 
+  const emptyPrices: PriceMap = {};
+  const [balances, prices] = await Promise.all([
+    isAddress(sca) ? fetchPortfolioBalances(sca) : Promise.resolve({} as Record<string, number>),
+    fetchCoinGeckoPrices(forcePrices).catch(() => emptyPrices),
+  ]);
+
+  const holdings: PortfolioHolding[] = PORTFOLIO_TOKENS.filter(
+    (t) => t.trackBalance !== false,
+  ).map((token) => {
+    const priceData = prices[token.geckoId];
+    const price = priceData?.usd ?? (getPortfolioGroup(token.symbol) === "cash" ? 1 : 0);
+    const change24h = priceData?.usd_24h_change ?? 0;
+    const amount = balances[token.symbol] ?? 0;
+    return {
+      token,
+      price,
+      change24h,
+      holdings: amount,
+      value: amount * price,
+      group: getPortfolioGroup(token.symbol),
+    };
+  });
+
+  holdings.sort((a, b) => {
+    if (a.value !== b.value) return b.value - a.value;
+    return (
+      PORTFOLIO_TOKENS.findIndex((t) => t.symbol === a.token.symbol) -
+      PORTFOLIO_TOKENS.findIndex((t) => t.symbol === b.token.symbol)
+    );
+  });
+
+  let earnUsd = 0;
+  let loanUsd = 0;
+  if (isHexAddress(sca)) {
     try {
-      const wallet = await fetchWalletRecord();
-      const sca = wallet.scaAddress;
-      setScaAddress(sca);
-
-      const emptyPrices: PriceMap = {};
-      const [rawBalances, prices] = await Promise.all([
-        isAddress(sca) ? fetchPortfolioBalances(sca) : Promise.resolve({} as Record<string, number>),
-        fetchCoinGeckoPrices(isRefresh).catch(() => emptyPrices),
-      ]);
-      setBalances(rawBalances);
-
-      const next: PortfolioHolding[] = PORTFOLIO_TOKENS.filter(
-        (t) => t.trackBalance !== false,
-      ).map((token) => {
-        const priceData = prices[token.geckoId];
-        const price = priceData?.usd ?? (getPortfolioGroup(token.symbol) === "cash" ? 1 : 0);
-        const change24h = priceData?.usd_24h_change ?? 0;
-        const amount = rawBalances[token.symbol] ?? 0;
-        return {
-          token,
-          price,
-          change24h,
-          holdings: amount,
-          value: amount * price,
-          group: getPortfolioGroup(token.symbol),
-        };
-      });
-
-      next.sort((a, b) => {
-        if (a.value !== b.value) return b.value - a.value;
-        return (
-          PORTFOLIO_TOKENS.findIndex((t) => t.symbol === a.token.symbol) -
-          PORTFOLIO_TOKENS.findIndex((t) => t.symbol === b.token.symbol)
-        );
-      });
-
-      setHoldings(next);
-
-      if (isHexAddress(sca)) {
-        try {
-          const [earn, loan] = await Promise.all([
-            sumEarnPositionsUsd(sca),
-            sumBorrowDebtsUsd(sca),
-          ]);
-          setEarnUsd(earn);
-          setLoanUsd(loan);
-        } catch {
-          setEarnUsd(0);
-          setLoanUsd(0);
-        }
-      } else {
-        setEarnUsd(0);
-        setLoanUsd(0);
-      }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load portfolio");
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
+      [earnUsd, loanUsd] = await Promise.all([sumEarnPositionsUsd(sca), sumBorrowDebtsUsd(sca)]);
+    } catch {
+      /* positions are optional: show 0 rather than fail the whole portfolio */
     }
-  }, []);
+  }
 
-  useEffect(() => {
-    void load(false);
-  }, [load]);
+  return { scaAddress: sca, balances, holdings, earnUsd, loanUsd };
+}
 
-  useEffect(() => {
-    const id = setInterval(() => {
-      void load(true);
-    }, 60_000);
-    return () => clearInterval(id);
-  }, [load]);
+export function usePortfolio() {
+  // No backend: the Smart Wallet address is derived locally (DashboardWalletBootstrap)
+  // and published through the session store — reload once it is known.
+  const localSca = useWalletSessionStore((s) => (features.backend ? null : s.scaOverride));
+  // Reloads bypass the price cache; the first load may use it.
+  const loadedOnce = useRef(false);
+
+  const { data, loading, refreshing, error, refresh } = useLoad({
+    key: ["portfolio", localSca?.toLowerCase() ?? null],
+    load: async () => {
+      const snapshot = await loadPortfolio(localSca, loadedOnce.current);
+      loadedOnce.current = true;
+      return snapshot;
+    },
+    errorMessage: "Failed to load portfolio",
+    refreshMs: 60_000,
+  });
+
+  const scaAddress = data?.scaAddress ?? null;
+  const balances = data?.balances ?? NO_BALANCES;
+  const holdings = data?.holdings ?? NO_HOLDINGS;
+  const earnUsd = data?.earnUsd ?? 0;
+  const loanUsd = data?.loanUsd ?? 0;
 
   const totalValue = useMemo(
     () => holdings.reduce((sum, h) => sum + (h.value > 0 ? h.value : 0), 0),
@@ -214,6 +207,6 @@ export function usePortfolio() {
     loading,
     refreshing,
     error,
-    refresh: () => load(true),
+    refresh,
   };
 }

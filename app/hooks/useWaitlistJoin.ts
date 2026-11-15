@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
+import { useLoad } from "@/hooks/useLoad";
 import { useAppStore } from "@/store/useAppStore";
-import { hasBackendUrl } from "@/config/env";
+import { features } from "@/config/features";
 import {
   getWaitlistStatus,
   joinWaitlist,
@@ -34,46 +35,32 @@ export function useWaitlistJoin(product: WaitlistProduct, enabled = true) {
   const displayName = useAppStore((s) => s.userProfile.displayName);
   const hasRealEmail = Boolean(email?.trim() && email.includes("@"));
 
-  const [joined, setJoined] = useState(false);
-  const [checking, setChecking] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  // Set by a successful join() so the UI flips without waiting for a reload.
+  const [joinedKey, setJoinedKey] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!enabled || !hasBackendUrl() || !hasRealEmail) {
-      setJoined(false);
-      setChecking(false);
-      return;
-    }
+  const active = enabled && features.card && hasRealEmail;
+  const statusKey = active ? cacheKey(email, product) : null;
 
-    const cached = readCached(email, product);
-    if (cached !== null) {
-      setJoined(cached);
-      setChecking(false);
-      return;
-    }
+  const status = useLoad({
+    key: ["waitlist", "status", statusKey],
+    load: async () => {
+      const cached = readCached(email, product);
+      if (cached !== null) return cached;
+      const { joined: isJoined } = await getWaitlistStatus(email, product);
+      writeCached(email, product, isJoined);
+      return isJoined;
+    },
+    errorMessage: "Failed to check waitlist status",
+    enabled: active,
+  });
 
-    let cancelled = false;
-    setChecking(true);
-    void getWaitlistStatus(email, product)
-      .then((status) => {
-        if (cancelled) return;
-        writeCached(email, product, status.joined);
-        setJoined(status.joined);
-      })
-      .catch(() => {
-        if (!cancelled) setJoined(false);
-      })
-      .finally(() => {
-        if (!cancelled) setChecking(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [enabled, email, hasRealEmail, product]);
+  // A failed check reads as "not joined", as before.
+  const joined = statusKey !== null && (joinedKey === statusKey || status.data === true);
+  const checking = active && status.loading;
 
   const join = useCallback(async () => {
-    if (!hasBackendUrl()) throw new Error("WAITLIST_UNAVAILABLE");
+    if (!features.card) throw new Error("WAITLIST_UNAVAILABLE");
     if (!hasRealEmail) throw new Error("EMAIL_REQUIRED");
 
     setSubmitting(true);
@@ -85,7 +72,7 @@ export function useWaitlistJoin(product: WaitlistProduct, enabled = true) {
         source: "web_app",
       });
       writeCached(email, product, true);
-      setJoined(true);
+      setJoinedKey(cacheKey(email, product));
       return result;
     } finally {
       setSubmitting(false);
@@ -98,6 +85,6 @@ export function useWaitlistJoin(product: WaitlistProduct, enabled = true) {
     checking,
     submitting,
     hasRealEmail,
-    backendAvailable: hasBackendUrl(),
+    backendAvailable: features.card,
   };
 }

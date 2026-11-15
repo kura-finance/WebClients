@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import Link from "next/link";
 import { Search, RefreshCw, ChevronRight } from "lucide-react";
 import {
@@ -8,7 +8,7 @@ import {
   PORTFOLIO_TOKENS,
   type PortfolioTokenMeta,
 } from "@/lib/portfolioTokens";
-import { fetchCoinGeckoPrices, type PriceMap } from "@/lib/coingeckoPrices";
+import { useCoinGeckoPrices } from "@/hooks/useCoinGeckoPrices";
 import { marketSlug } from "@/lib/tradingViewSymbols";
 import { cryptoLogoUrl } from "@/lib/assetLogos";
 import { Button } from "@/components/ui/button";
@@ -66,31 +66,9 @@ interface Row {
 }
 
 export default function MarketsListView() {
-  const [prices, setPrices] = useState<PriceMap>({});
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { prices, loading, refreshing, error, refresh } = useCoinGeckoPrices();
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<SortKey>("popular");
-
-  const load = async (isRefresh = false) => {
-    if (isRefresh) setRefreshing(true);
-    else setLoading(true);
-    setError(null);
-    try {
-      const next = await fetchCoinGeckoPrices(isRefresh);
-      setPrices(next);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load prices");
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  };
-
-  useEffect(() => {
-    void load(false);
-  }, []);
 
   const rows: Row[] = useMemo(
     () =>
@@ -147,7 +125,7 @@ export default function MarketsListView() {
             type="button"
             variant="ghost"
             size="sm"
-            onClick={() => void load(true)}
+            onClick={() => void refresh()}
             disabled={loading || refreshing}
             className="gap-1.5 text-[var(--kura-text-secondary)]"
           >

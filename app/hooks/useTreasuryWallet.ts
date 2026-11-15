@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo } from "react";
+import { useLoad } from "@/hooks/useLoad";
 import { selectActiveTreasury, useOrgStore, type OrgTreasury } from "@/store/useOrgStore";
 import {
   fetchSafeSigners,
@@ -20,6 +21,34 @@ function isAddress(value: string | null | undefined): value is `0x${string}` {
 
 function emptyStableBalances(): StablecoinBalances {
   return Object.fromEntries(HOME_STABLECOINS.map((t) => [t.symbol, 0]));
+}
+
+const EMPTY_STABLE_BALANCES = emptyStableBalances();
+
+interface TreasurySafeSnapshot {
+  deployed: boolean;
+  stableBalances: StablecoinBalances;
+  safeSigners: SafeSignerInfo | null;
+  signersError: string | null;
+}
+
+/** Each part falls back on its own, so one failed read does not blank the rest. */
+async function loadTreasurySafe(scaAddress: `0x${string}`): Promise<TreasurySafeSnapshot> {
+  const deployed = await isTreasurySafeDeployed(scaAddress).catch(() => false);
+
+  const [stableBalances, signers] = await Promise.all([
+    fetchStablecoinBalances(scaAddress).catch(() => emptyStableBalances()),
+    deployed
+      ? fetchSafeSigners(scaAddress)
+          .then((info) => ({ safeSigners: info as SafeSignerInfo | null, signersError: null as string | null }))
+          .catch((e) => ({
+            safeSigners: null,
+            signersError: e instanceof Error ? e.message : "Failed to read Treasury Safe owners",
+          }))
+      : Promise.resolve({ safeSigners: null, signersError: null }),
+  ]);
+
+  return { deployed, stableBalances, ...signers };
 }
 
 export interface TreasuryWalletState {
@@ -58,81 +87,27 @@ export function useTreasuryWallet(): TreasuryWalletState {
   const scaAddress = active?.address ?? null;
   const source = active?.source ?? null;
 
-  const [loading, setLoading] = useState(false);
-  const [deployed, setDeployed] = useState(false);
-  const [stableBalances, setStableBalances] = useState<StablecoinBalances>(emptyStableBalances);
-  const [stablesLoading, setStablesLoading] = useState(false);
-  const [safeSigners, setSafeSigners] = useState<SafeSignerInfo | null>(null);
-  const [signersLoading, setSignersLoading] = useState(false);
-  const [signersError, setSignersError] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
   const accountOpts: SafeAccountOpts = isAddress(scaAddress)
     ? treasuryAccountOpts(source, scaAddress, active?.saltNonce)
     : {};
 
-  const refresh = useCallback(async () => {
-    if (!isAddress(scaAddress)) {
-      setStableBalances(emptyStableBalances());
-      setSafeSigners(null);
-      setSignersError(null);
-      setError(null);
-      setDeployed(false);
-      setLoading(false);
-      setStablesLoading(false);
-      setSignersLoading(false);
-      return;
-    }
+  const valid = isAddress(scaAddress);
+  const { data, fetching, error, refresh } = useLoad({
+    key: ["treasury", "wallet", valid ? scaAddress.toLowerCase() : null],
+    load: () => loadTreasurySafe(scaAddress as `0x${string}`),
+    errorMessage: "Failed to load Treasury Safe",
+    enabled: valid,
+    refreshMs: 90_000,
+  });
 
-    setLoading(true);
-    setStablesLoading(true);
-    setSignersLoading(true);
-    setError(null);
-    try {
-      const onChain = await isTreasurySafeDeployed(scaAddress).catch(() => false);
-      setDeployed(onChain);
-
-      await Promise.all([
-        fetchStablecoinBalances(scaAddress)
-          .then(setStableBalances)
-          .catch(() => setStableBalances(emptyStableBalances())),
-        onChain
-          ? fetchSafeSigners(scaAddress)
-              .then((info) => {
-                setSafeSigners(info);
-                setSignersError(null);
-              })
-              .catch((e) => {
-                setSafeSigners(null);
-                setSignersError(
-                  e instanceof Error ? e.message : "Failed to read Treasury Safe owners",
-                );
-              })
-          : Promise.resolve().then(() => {
-              setSafeSigners(null);
-              setSignersError(null);
-            }),
-      ]);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load Treasury Safe");
-    } finally {
-      setLoading(false);
-      setStablesLoading(false);
-      setSignersLoading(false);
-    }
-  }, [scaAddress]);
-
-  useEffect(() => {
-    void refresh();
-  }, [refresh]);
-
-  useEffect(() => {
-    if (!scaAddress) return;
-    const id = setInterval(() => {
-      void refresh();
-    }, 90_000);
-    return () => clearInterval(id);
-  }, [refresh, scaAddress]);
+  const safe = valid ? data : undefined;
+  const loading = fetching;
+  const deployed = safe?.deployed ?? false;
+  const stableBalances = safe?.stableBalances ?? EMPTY_STABLE_BALANCES;
+  const stablesLoading = fetching;
+  const safeSigners = safe?.safeSigners ?? null;
+  const signersLoading = fetching;
+  const signersError = safe?.signersError ?? null;
 
   return {
     loading,

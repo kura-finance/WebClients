@@ -8,7 +8,7 @@ import MetalCardPreview from "@/components/card/MetalCardPreview";
 import { useWaitlistJoin } from "@/hooks/useWaitlistJoin";
 import { WAITLIST_PRODUCTS } from "@/lib/waitlistApi";
 import { ApiError } from "@/lib/errorHandler";
-import { hasBackendUrl } from "@/config/env";
+import { features } from "@/config/features";
 import { DashboardPage, PageHeader } from "@/components/dashboard/PageShell";
 
 type CardTab = "virtual" | "metal";
@@ -225,12 +225,12 @@ export default function CardWaitlistView() {
       <Button
         type="button"
         onClick={() => void submit()}
-        disabled={active.checking || active.submitting || !hasBackendUrl()}
+        disabled={active.checking || active.submitting || !features.card}
         className={`mt-6 h-12 w-full rounded-[14px] text-[15px] font-bold text-white ${
           tab === "metal"
             ? "bg-[#B45309] hover:bg-[#92400e]"
             : "bg-[var(--kura-primary)] hover:bg-[var(--kura-primary-dark)]"
-        } ${active.joined ? "opacity-70" : !hasBackendUrl() ? "opacity-55" : ""}`}
+        } ${active.joined ? "opacity-70" : !features.card ? "opacity-55" : ""}`}
       >
         {ctaLabel}
       </Button>

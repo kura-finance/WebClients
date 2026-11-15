@@ -1,6 +1,10 @@
 /**
- * Safe SCA UserOps on Base via Privy embedded EOA + Pimlico.
+ * Safe SCA UserOps on Base via the owner EOA + a Pimlico bundler.
  * Mirrors mobile `smartAccountClient` / `sendUsdcTx` for web Smart Wallet sends.
+ *
+ * Gas: with NEXT_PUBLIC_PIMLICO_API_KEY the keyed bundler and paymaster are used
+ * (USDC gas unless NEXT_PUBLIC_PAY_GAS_IN_USDC=false). Without a key, UserOps go
+ * through Pimlico's public bundler and the Safe pays gas in ETH — same as mobile.
  */
 
 import {
@@ -19,9 +23,10 @@ import { base } from "viem/chains";
 import { createSmartAccountClient } from "permissionless";
 import { toSafeSmartAccount } from "permissionless/accounts";
 import { createPimlicoClient } from "permissionless/clients/pimlico";
-import { env, isPimlicoConfigured } from "@/config/env";
+import { env, isPimlicoConfigured, paysGasInUsdc } from "@/config/env";
 import { USDC_BASE } from "@/lib/baseChain";
 import type { LiFiBridgeQuote } from "@/lib/lifiBridge";
+import { signerCopy } from "@/lib/signer/copy";
 
 const BASE_FALLBACK = "https://mainnet.base.org";
 
@@ -39,14 +44,19 @@ function rpcUrls(): string[] {
   return [...new Set(urls)];
 }
 
-function pimlicoUrl(): string {
-  if (!env.pimlicoApiKey) {
-    throw new Error(
-      "Pimlico is not configured. Set NEXT_PUBLIC_PIMLICO_API_KEY to send from your Smart Wallet.",
-    );
-  }
-  return `https://api.pimlico.io/v2/base/rpc?apikey=${env.pimlicoApiKey}`;
+/** Pimlico public bundler (no API key) — Base chain id 8453. */
+const PIMLICO_PUBLIC_BUNDLER_URL = "https://public.pimlico.io/v2/8453/rpc";
+
+/** Authenticated Pimlico when a key is set; otherwise the public endpoint. */
+function bundlerUrl(): string {
+  return env.pimlicoApiKey
+    ? `https://api.pimlico.io/v2/base/rpc?apikey=${env.pimlicoApiKey}`
+    : PIMLICO_PUBLIC_BUNDLER_URL;
 }
+
+/** Shown where a send is offered while gas is paid in ETH. */
+export const ETH_GAS_NOTICE =
+  "Network fees are paid in ETH: keep a little ETH on Base in the wallet you send from.";
 
 export type Call = { to: `0x${string}`; data: `0x${string}`; value?: bigint };
 
@@ -62,8 +72,22 @@ export type SafeAccountOpts = {
 };
 
 function shouldPayGasWithUsdc(opts?: Pick<SafeAccountOpts, "payGasWithUsdc">): boolean {
+  // The ERC-20 paymaster needs a Pimlico key; without one gas is always ETH.
+  if (!isPimlicoConfigured()) return false;
   if (opts?.payGasWithUsdc !== undefined) return opts.payGasWithUsdc;
-  return env.payGasInUsdc;
+  return paysGasInUsdc();
+}
+
+/**
+ * Public bundler, no paymaster: the Safe itself prefunds the UserOp in ETH.
+ * Fail early with a readable message instead of the bundler's AA21 error.
+ */
+async function assertEthForGas(publicClient: AnyClient, scaAddress: `0x${string}`): Promise<void> {
+  const balance = (await publicClient.getBalance({ address: scaAddress })) as bigint;
+  if (balance > BigInt(0)) return;
+  throw new Error(
+    `No ETH for network fees. Send a little ETH on Base to ${scaAddress} and try again.`,
+  );
 }
 
 async function withGasApprovalCalls(
@@ -191,13 +215,9 @@ async function resolveSmartAccount(
   pimlicoClient: AnyClient;
   scaAddress: `0x${string}`;
   payGasWithUsdc: boolean;
+  /** No paymaster: the Safe needs ETH for the UserOp prefund. */
+  selfPaysGas: boolean;
 }> {
-  if (!isPimlicoConfigured()) {
-    throw new Error(
-      "Pimlico is not configured. Set NEXT_PUBLIC_PIMLICO_API_KEY to send from your Smart Wallet.",
-    );
-  }
-
   const payGasWithUsdc = shouldPayGasWithUsdc(params);
   const entryPoint = { address: entryPoint07Address, version: "0.7" as const };
   const publicClient: AnyClient = createPublicClient({
@@ -209,7 +229,7 @@ async function resolveSmartAccount(
     method: "eth_accounts",
   })) as string[];
   const eoaAddress = accounts[0] as `0x${string}` | undefined;
-  if (!eoaAddress) throw new Error("No Privy wallet available. Sign in again and retry.");
+  if (!eoaAddress) throw new Error(signerCopy.noWallet);
 
   try {
     await params.eip1193Provider.request({
@@ -237,21 +257,24 @@ async function resolveSmartAccount(
 
   if (account.address.toLowerCase() !== params.expectedScaAddress.toLowerCase()) {
     throw new Error(
-      `Smart Wallet address mismatch. Expected ${params.expectedScaAddress}, got ${account.address}. Use the same Privy account that owns your Smart Wallet.`,
+      `Smart Wallet address mismatch. Expected ${params.expectedScaAddress}, got ${account.address}. Use the same ${signerCopy.account} that owns your Smart Wallet.`,
     );
   }
 
-  const pimlicoTransport = http(pimlicoUrl());
+  const pimlicoTransport = http(bundlerUrl());
   const pimlicoClient: AnyClient = createPimlicoClient({
     transport: pimlicoTransport,
     entryPoint,
   });
 
+  // The public bundler has no paymaster: the Safe pays its own gas in ETH.
+  const usePaymaster = isPimlicoConfigured();
+
   const smartAccountClient: AnyClient = createSmartAccountClient({
     account,
     chain: base,
     bundlerTransport: pimlicoTransport,
-    paymaster: pimlicoClient,
+    ...(usePaymaster ? { paymaster: pimlicoClient } : {}),
     ...(payGasWithUsdc ? { paymasterContext: { token: USDC_BASE } } : {}),
     userOperation: {
       estimateFeesPerGas: async () => (await pimlicoClient.getUserOperationGasPrice()).fast,
@@ -264,6 +287,7 @@ async function resolveSmartAccount(
     pimlicoClient,
     scaAddress: account.address,
     payGasWithUsdc,
+    selfPaysGas: !usePaymaster,
   };
 }
 
@@ -279,8 +303,9 @@ export async function sendUsdcFromSafe(params: {
 } & SafeAccountOpts): Promise<string> {
   if (!(params.amountUsdc > 0)) throw new Error("Amount must be greater than 0.");
 
-  const { smartAccountClient, publicClient, pimlicoClient, scaAddress, payGasWithUsdc } =
+  const { smartAccountClient, publicClient, pimlicoClient, scaAddress, payGasWithUsdc, selfPaysGas } =
     await resolveSmartAccount(params);
+  if (selfPaysGas) await assertEthForGas(publicClient, scaAddress);
 
   const amountRaw = BigInt(Math.round(params.amountUsdc * 1_000_000));
   const rawCalls: Call[] = [
@@ -317,8 +342,9 @@ export async function executeLiFiBridgeFromSafe(params: {
   expectedScaAddress: `0x${string}`;
   quote: LiFiBridgeQuote;
 } & SafeAccountOpts): Promise<string> {
-  const { smartAccountClient, publicClient, pimlicoClient, scaAddress, payGasWithUsdc } =
+  const { smartAccountClient, publicClient, pimlicoClient, scaAddress, payGasWithUsdc, selfPaysGas } =
     await resolveSmartAccount(params);
+  if (selfPaysGas) await assertEthForGas(publicClient, scaAddress);
 
   const fromToken = (params.quote.fromToken.address || USDC_BASE) as `0x${string}`;
   const callsRaw = await buildAllowanceAndTxCalls({
@@ -358,8 +384,9 @@ export async function executeCallsFromSafe(params: {
 } & SafeAccountOpts): Promise<string> {
   if (!params.calls.length) throw new Error("No calls to execute.");
 
-  const { smartAccountClient, publicClient, pimlicoClient, scaAddress, payGasWithUsdc } =
+  const { smartAccountClient, publicClient, pimlicoClient, scaAddress, payGasWithUsdc, selfPaysGas } =
     await resolveSmartAccount(params);
+  if (selfPaysGas) await assertEthForGas(publicClient, scaAddress);
 
   if (payGasWithUsdc) {
     await assertUsdcForPaymaster(publicClient, scaAddress, params.calls);
@@ -419,8 +446,9 @@ export async function executeLiFiSwapFromSafe(params: {
     transactionRequest: { to: string; data: string; value?: string };
   };
 } & SafeAccountOpts): Promise<string> {
-  const { smartAccountClient, publicClient, pimlicoClient, scaAddress, payGasWithUsdc } =
+  const { smartAccountClient, publicClient, pimlicoClient, scaAddress, payGasWithUsdc, selfPaysGas } =
     await resolveSmartAccount(params);
+  if (selfPaysGas) await assertEthForGas(publicClient, scaAddress);
 
   const fromToken = params.quote.fromToken.address as `0x${string}`;
   const callsRaw = await buildAllowanceAndTxCalls({

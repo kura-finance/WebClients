@@ -1,9 +1,11 @@
 /**
- * Asset / ticker logos via logo.dev (same as mobile).
- * Clearbit is deprecated / shut down — do not use.
+ * Asset / ticker logos (same as mobile): logo.dev when a key is set, otherwise
+ * the keyless table in tokenLogos.ts for crypto. Stocks and company domains
+ * have no keyless source and fall back to a glyph.
  */
 
 import { env } from "@/config/env";
+import { tokenLogoUrl } from "@/lib/tokenLogos";
 
 function logoDevToken(): string {
   return env.logodevToken;
@@ -20,10 +22,14 @@ export function stockLogoUrl(symbol: string, size = 64): string | null {
   );
 }
 
-/** Crypto symbol logo — `img.logo.dev/crypto/{symbol}`. */
+/**
+ * Crypto symbol logo — `img.logo.dev/crypto/{symbol}` with a key, else the
+ * keyless table (null for symbols it does not list).
+ */
 export function cryptoLogoUrl(symbol: string, size = 128): string | null {
   const token = logoDevToken();
-  if (!token || !symbol) return null;
+  if (!symbol) return null;
+  if (!token) return tokenLogoUrl(symbol);
   return (
     `https://img.logo.dev/crypto/${encodeURIComponent(symbol.trim().toLowerCase())}` +
     `?token=${encodeURIComponent(token)}&size=${size}&format=png`

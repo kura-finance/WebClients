@@ -7,8 +7,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { useAppStore } from '@/store/useAppStore';
 import { getPasskeyStatus } from '@/lib/authApi';
+import LocalWalletSecurity from '@/components/localWallet/LocalWalletSecurity';
+import { features } from '@/config/features';
 
+/** Backend: passkey / E2EE. No backend: back up or remove the browser wallet. */
 export default function SecurityPage() {
+  return features.e2ee ? <PasskeySecurity /> : <LocalWalletSecurity />;
+}
+
+function PasskeySecurity() {
   const userEmail = useAppStore((state) => state.userProfile.email);
   const isDecryptionReady = useAppStore((state) => state.isDecryptionReady);
   const e2eeError = useAppStore((state) => state.e2eeError);
