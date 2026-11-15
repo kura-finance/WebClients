@@ -2,6 +2,7 @@
 
 > 工作筆記，對應 PR「On-chain community edition」。全部完成後請刪除這個檔案。
 > 相關 PR：mobile-app 與 BackendServer 的同名分支 `claude/awesome-ritchie-i1bwnp`。
+> 2026-11-16 已 squash 合併並部署：WebClients #1（社區版）、#2（拿掉 Li.Fi 抽成）、#3（只收過款的錢包也有交易紀錄）。正式站仍是有後端模式。
 
 已通過：`npm test`（45 個）、`npm run typecheck`、`npm run lint`（0 錯誤）、有後端與無後端兩種 `npm run build`、Chromium 自動化流程。
 安裝要用 `npm ci --legacy-peer-deps`。
@@ -25,7 +26,6 @@
       要先勾選「我有備份」才能移除；同一個錢包重新匯入（換新密碼）後清單還在。匯入另一個錢包時清單會清空，這是原本的設計
 - [x] 15 分鐘無操作自動上鎖；另一個分頁移除錢包時本分頁同步上鎖
       2026-11-15 在瀏覽器實測：解鎖後完全不碰分頁，滿 15 分鐘時自動回到解鎖畫面（12 分 50 秒時仍是解鎖狀態）；在第二個分頁移除錢包後，第一個分頁立刻從 dashboard 回到歡迎畫面
-      已驗：另一個分頁移除錢包後，已解鎖的分頁立刻回到歡迎畫面。15 分鐘自動上鎖未驗
 - [ ] Safari、Firefox 各跑一次建立與解鎖
       2026-11-13 另外在真的 Chrome（157，透過 Claude 擴充功能）跑過一輪 smoke test：建立錢包、重新整理後解鎖、錯誤密碼被拒、選單上鎖、忘記密碼移除；Earn／Borrow／Markets 列表與詳情、Treasury、Approvals、Team、Report、加值（QR 解碼與顯示地址相符）、轉帳各頁都載入；沒有請求送往 Privy、後端或 Plaid，也沒有 console 錯誤。Safari、Firefox 仍未跑
 - [x] DevTools Network：沒有任何請求送往 Privy、後端或 Plaid
@@ -42,10 +42,13 @@
 ## 3. 有後端的模式（自架者會用到）
 
 - [ ] 設定後端 URL 與 Privy app id 後，用真實 Privy 帳號登入，各頁行為和改動前一樣（目前只用模擬資料比對過 20 個路由）
+      2026-11-16 部署後在正式站（Chrome）用真實帳號登入：Privy 登入成功，`auth/login`、`auth/me`、`stripe/billing-status` 都是 200，沒有 CORS 錯誤。**dashboard 各頁沒驗到**：網頁 dashboard 本來就只開放 Pro／Ultimate，測試用的 admin 帳號 Stripe 訂閱已取消、現在是 Basic，停在「Upgrade to access Kura」。這個門檻改動前後相同。要驗 Treasury（伺服器同步第一次真的會讀寫）、TrackFi、股票、Plaid、候補名單，需要一個付費帳號
+      本機 localhost 無法測：正式後端的 CORS 與 Privy 的允許網域都只接受 kura-finance.com
 
 ## 4. 發佈
 
-- [ ] 合併時 squash：分支上有三個標成 WIP 的中間 commit
+- [x] 合併時 squash：分支上有三個標成 WIP 的中間 commit
+      2026-11-16 以 squash 合併
 - [ ] 後端停機（預計明年）時，`deploy.yml` 拿掉後端相關的 build args
       目前刻意保留 `NEXT_PUBLIC_BACKEND_URL`、`NEXT_PUBLIC_API_URL`、Privy app id、Reown project id、4 個 Stripe price id，正式站繼續以有後端模式部署，現有的 Privy 用戶照常登入。`NEXT_PUBLIC_*` 在 build 時就寫死，只有 GitHub secret、沒有 `--build-arg` 是不會生效的。停機前要先照 mobile-app 的 `docs/store-release.md` 公告匯出私鑰，再拿掉這些參數
 - [x] **Li.Fi 抽成是 25%，不是 0.25%**：`deploy.yml` 寫死 `NEXT_PUBLIC_LIFI_FEE="0.25"`，而 Li.Fi 的 `fee` 是 0 到 1 的比例。2026-11-15 向 Li.Fi 實際詢價：100 USDC 換 DAI，不帶 fee 拿到 99.87，帶 `fee=0.25` 只拿到 74.84（費用 25.12 美元）
@@ -61,6 +64,7 @@
       `app/layout.tsx` 的 `<html>` 加上 `suppressHydrationWarning`；Chrome 重新載入後警告消失，深色主題照常套用
 - [x] 歷史紀錄其實一直是空的：`base.blockscout.com/api` 對所有 API 請求回 Cloudflare 驗證頁（瀏覽器直接開也一樣），而原本的程式把非 200 當成「沒有交易」，所以首頁、Treasury、Report、歷史頁都顯示「No transactions yet」而不報錯（做 mobile-app 的模擬器測試時發現的）
       改用 `app/lib/chain/walletTransfers.ts`：Safe Transaction Service 的索引紀錄，加上 Base RPC 的 Transfer 事件補「還沒部署的錢包」與索引延遲。細節與限制見 mobile-app 的 TODO.md；這個檔案與 mobile-app 的 `src/lib/chain/walletTransfers.ts` 完全相同，改一邊要同步另一邊。已在瀏覽器驗過：一個有 5 筆轉帳的公開 Safe 能正確列出收付款，console 沒有錯誤
+      2026-11-16 補上：還沒部署、收款又超過約 7 天的錢包，改從餘額歷史找出每一筆收款（WebClients #3，細節見 mobile-app 的 TODO.md）
       順帶：Safe Transaction Service 的網址改成它現在的位置 `api.safe.global/tx-service/base`（舊網址會轉址過去），CSP 拿掉不再使用的 Blockscout。Treasury 的 Approvals／提案也走這個網址，**送出提案沒有實測**
 - [ ] 銀行出入金（Bridge）還有 4 處 effect 保留原樣，就地加了 `eslint-disable` 與說明：`AddMoneyView` 2 處、`MakePaymentView` 的銀行付款 2 處。它們會在伺服器端建立虛擬帳戶／付款地址，沒有後端沙盒無法驗證，所以沒有改寫
 
