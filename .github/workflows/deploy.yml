@@ -62,8 +62,6 @@ jobs:
             --build-arg NEXT_PUBLIC_LOGODEV_TOKEN="${{ secrets.NEXT_PUBLIC_LOGODEV_TOKEN }}" \
             --build-arg NEXT_PUBLIC_PIMLICO_API_KEY="${{ secrets.NEXT_PUBLIC_PIMLICO_API_KEY }}" \
             --build-arg NEXT_PUBLIC_PAY_GAS_IN_USDC="${{ secrets.NEXT_PUBLIC_PAY_GAS_IN_USDC }}" \
-            --build-arg NEXT_PUBLIC_LIFI_INTEGRATOR="kura" \
-            --build-arg NEXT_PUBLIC_LIFI_FEE="0.25" \
             --build-arg NEXT_PUBLIC_LIFI_API_KEY="${{ secrets.NEXT_PUBLIC_LIFI_API_KEY }}" \
             --build-arg NEXT_PUBLIC_STRIPE_PRICE_PRO_MONTHLY="${{ secrets.NEXT_PUBLIC_STRIPE_PRICE_PRO_MONTHLY }}" \
             --build-arg NEXT_PUBLIC_STRIPE_PRICE_PRO_YEARLY="${{ secrets.NEXT_PUBLIC_STRIPE_PRICE_PRO_YEARLY }}" \
