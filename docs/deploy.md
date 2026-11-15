@@ -168,6 +168,29 @@ PR / push **CI** (lint + typecheck) lives in [`.github/workflows/ci.yml`](../.gi
 | Timeout | 900s |
 | Ingress | `--allow-unauthenticated` (TLS on Cloud Run) |
 
+### When the hosted backend shuts down
+
+Production is built in backend mode until `api.kura-finance.com` shuts down
+(planned for 2027): existing users sign in with Privy and their key is held by
+Privy. Switching the site to the on-chain build cuts them off, so first publish
+the notice in mobile-app `docs/store-release.md` §2 (export the key at
+home.privy.io) and give people time to act.
+
+Then, in `.github/workflows/deploy.yml`, remove these `--build-arg`s and merge to
+main (which deploys):
+
+- `NEXT_PUBLIC_BACKEND_URL`, `NEXT_PUBLIC_API_URL`
+- `NEXT_PUBLIC_PRIVY_APP_ID`, `NEXT_PUBLIC_REOWN_PROJECT_ID`
+- the four `NEXT_PUBLIC_STRIPE_PRICE_*`
+
+Removing the GitHub secrets alone changes nothing: the build only sees what the
+workflow passes. After the deploy, check the site shows "Create a new wallet"
+and that no request goes to the backend or Privy.
+
+Testing backend mode from `localhost` does not work against production: the
+backend's CORS and Privy's allowed origins only accept the kura-finance.com
+domains.
+
 ---
 
 ## After deploy

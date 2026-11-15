@@ -300,7 +300,8 @@ function BankTransferPanel({
 
   // Bank deposits (Bridge) keep their hand-written loaders: the flow creates
   // server-side virtual accounts and cannot be exercised without a backend, so
-  // it was left as it is rather than rewritten untested. See TODO.md.
+  // it was left as it is rather than rewritten untested. See docs/architecture.md
+  // (Known limitations).
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void refresh();
