@@ -53,6 +53,15 @@ function localDisplayNameKey(userId: string): string {
   return `kura-display-name:${userId}`;
 }
 
+/** Drop the display name kept for a wallet that is being removed from this browser. */
+export function forgetLocalDisplayName(userId: string): void {
+  try {
+    localStorage.removeItem(localDisplayNameKey(userId));
+  } catch {
+    /* storage unavailable */
+  }
+}
+
 function readLocalDisplayName(userId: string): string {
   try {
     return localStorage.getItem(localDisplayNameKey(userId)) ?? '';

@@ -23,7 +23,8 @@
       輸入密碼後顯示 12 字，「Hide」會收起；移除後回到歡迎畫面。「Show private key」按鈕沒有點過
 - [x] 解鎖畫面「忘記密碼」→ 移除 → 用助記詞重新匯入，Treasury 清單還在
       要先勾選「我有備份」才能移除；同一個錢包重新匯入（換新密碼）後清單還在。匯入另一個錢包時清單會清空，這是原本的設計
-- [ ] 15 分鐘無操作自動上鎖；另一個分頁移除錢包時本分頁同步上鎖
+- [x] 15 分鐘無操作自動上鎖；另一個分頁移除錢包時本分頁同步上鎖
+      2026-11-15 在瀏覽器實測：解鎖後完全不碰分頁，滿 15 分鐘時自動回到解鎖畫面（12 分 50 秒時仍是解鎖狀態）；在第二個分頁移除錢包後，第一個分頁立刻從 dashboard 回到歡迎畫面
       已驗：另一個分頁移除錢包後，已解鎖的分頁立刻回到歡迎畫面。15 分鐘自動上鎖未驗
 - [ ] Safari、Firefox 各跑一次建立與解鎖
       2026-11-13 另外在真的 Chrome（157，透過 Claude 擴充功能）跑過一輪 smoke test：建立錢包、重新整理後解鎖、錯誤密碼被拒、選單上鎖、忘記密碼移除；Earn／Borrow／Markets 列表與詳情、Treasury、Approvals、Team、Report、加值（QR 解碼與顯示地址相符）、轉帳各頁都載入；沒有請求送往 Privy、後端或 Plaid，也沒有 console 錯誤。Safari、Firefox 仍未跑
@@ -32,7 +33,8 @@
 
 ## 2. 地址一致性
 
-- [ ] 同一組助記詞在手機與網頁顯示同一個 Safe 地址
+- [x] 同一組助記詞在手機與網頁顯示同一個 Safe 地址
+      2026-11-15：網頁與手機模擬器各匯入一次 `abandon … about`，兩邊都顯示 `0xf78B124D0f676153b37b7852658B5000b390984B`
 - [x] 比對腳本在 mobile-app：`node scripts/safe-address-parity.cjs ../WebClients https://mainnet.base.org`
       2026-11-13 對 Base 主網跑過，兩個 repo 的三種推導都是 `0xf78B124D0f676153b37b7852658B5000b390984B`；網頁實際顯示的也是這個地址
 - [ ] 舊用戶：從 home.privy.io 匯出私鑰 → 匯入 → Safe 地址與原本相同
@@ -44,7 +46,10 @@
 ## 4. 發佈
 
 - [ ] 合併時 squash：分支上有三個標成 WIP 的中間 commit
-- [ ] `deploy.yml` 仍會帶入 `NEXT_PUBLIC_BACKEND_URL`、`LIFI_INTEGRATOR=kura`、`LIFI_FEE=0.25` 與 Stripe price id：清空後端 URL 再部署，並決定是否保留 Li.Fi 抽成
+- [ ] 後端停機（預計明年）時，`deploy.yml` 拿掉後端相關的 build args
+      目前刻意保留 `NEXT_PUBLIC_BACKEND_URL`、`NEXT_PUBLIC_API_URL`、Privy app id、Reown project id、4 個 Stripe price id，正式站繼續以有後端模式部署，現有的 Privy 用戶照常登入。`NEXT_PUBLIC_*` 在 build 時就寫死，只有 GitHub secret、沒有 `--build-arg` 是不會生效的。停機前要先照 mobile-app 的 `docs/store-release.md` 公告匯出私鑰，再拿掉這些參數
+- [x] **Li.Fi 抽成是 25%，不是 0.25%**：`deploy.yml` 寫死 `NEXT_PUBLIC_LIFI_FEE="0.25"`，而 Li.Fi 的 `fee` 是 0 到 1 的比例。2026-11-15 向 Li.Fi 實際詢價：100 USDC 換 DAI，不帶 fee 拿到 99.87，帶 `fee=0.25` 只拿到 74.84（費用 25.12 美元）
+      決定整個拿掉：`deploy.yml` 不再帶 integrator 與 fee，正式站的兌換與跨鏈只剩 Li.Fi 與路徑本身的費用。程式仍支援這兩個環境變數（自架者可自行設定），`.env.example` 與文件改寫成清楚標示「0.0025 = 0.25%、0.25 = 25%」。**合併到 main 並重新部署後才生效；在那之前線上的正式站仍在收 25%**。手機版沒有部署檔，打包時用的環境變數我看不到，請確認 `EXPO_PUBLIC_LIFI_FEE` 是空的或是你要的數值
 - [x] `proxy.ts` 的 CSP 仍寫死 `app.kura-finance.com`／`api.kura-finance.com` 並允許 Privy、Plaid 網域；社區版可以收緊
       無後端時不再放行 Privy、Plaid、Reown／WalletConnect、Coinbase SDK、Cloudflare 與 Kura API；寫死的 kura-finance 網域已拿掉（有後端時改用 `NEXT_PUBLIC_APP_URL`／`NEXT_PUBLIC_API_URL` 與後端 URL 的 origin）。有後端的 CSP 沒有實測
 
@@ -81,3 +86,5 @@
       用 repo 自己的 `public/favicon.svg` 產生 `favicon.ico`（32px）、`apple-touch-icon.png`（180px）、`icon-192.png`、`icon-512.png`、`icon-maskable-512.png`（白底），並把兩處引用改過去；manifest 的截圖改指向既有的 `screenshot.webp`。已驗過所有引用都回 200。**白底與留白是我選的**，要換成正式的圖示直接覆蓋同名檔案即可；**沒有在實機上做「加入主畫面」**
 - [x] 「有沒有後端」有兩種問法並存：`features.*` 與直接呼叫 `hasBackendUrl()`（4 個檔案 10 處，加上 `proxy.ts`）
       全部改成 `app/config/features.ts` 的旗標（候補名單用 `card`、股票用 `stocks`、銀行出入金紀錄用 `fiatRamp`）。兩種模式共用卻叫 Privy 的元件改名：`PrivySafeSetup` → `PersonalSafeSetup`、`PrivyEoaSync` → `SignerEoaSync`，相關註解改成「signer」。行為不變；有後端與無後端的 build 都通過。`next.config.ts` 仍自己讀環境變數（打包設定，不經過 app 的模組）
+- [x] 「從此瀏覽器移除錢包」之後，localStorage 仍留著被移除錢包的地址（`kura-org-owner`、`kura-display-name:<地址>`）與 Treasury 工作區資料
+      移除時一併清掉（`app/lib/localWallet/removeWallet.ts`，設定頁與「忘記密碼」兩個入口都走它）；其他開著的分頁收到 storage 事件時也會丟掉記憶體裡的工作區，否則下一次變更會把它寫回去。上鎖不受影響，工作區照舊保留。已在瀏覽器驗過：放入測試工作區與顯示名稱後，在第二個分頁移除錢包，兩個分頁的 localStorage 都只剩主題設定；原分頁接著建立另一個錢包，沒有帶到舊資料

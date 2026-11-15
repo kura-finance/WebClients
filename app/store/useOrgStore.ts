@@ -408,8 +408,9 @@ const ORG_OWNER_KEY = "kura-org-owner";
 
 /**
  * Local-only mode (no backend): localStorage is the only copy of the workspace,
- * so sign-out keeps it. Tag it with the signed-in user instead and wipe it only
- * when a different user signs in on this browser.
+ * so locking keeps it. Tag it with the signed-in user instead and wipe it when
+ * a different user signs in on this browser, or when the wallet is removed
+ * (forgetOrgWorkspace).
  */
 export function claimOrgWorkspace(ownerId: string): void {
   if (typeof window === "undefined") return;
@@ -421,6 +422,21 @@ export function claimOrgWorkspace(ownerId: string): void {
       useOrgStore.getState().resetOrgWorkspace();
     }
     localStorage.setItem(ORG_OWNER_KEY, ownerId);
+  } catch {
+    /* storage unavailable */
+  }
+}
+
+/**
+ * The wallet this workspace belonged to was removed from this browser: wipe the
+ * workspace and its owner tag, here and in storage.
+ */
+export function forgetOrgWorkspace(): void {
+  if (typeof window === "undefined") return;
+  useOrgStore.getState().resetOrgWorkspace();
+  try {
+    useOrgStore.persist.clearStorage();
+    localStorage.removeItem(ORG_OWNER_KEY);
   } catch {
     /* storage unavailable */
   }

@@ -18,6 +18,7 @@ import {
   touchActivity,
 } from "@/lib/localWallet/store";
 import { localUserId, useLocalWallet } from "@/lib/signer/local";
+import { forgetOrgWorkspace } from "@/store/useOrgStore";
 import { useAppStore } from "@/store/useAppStore";
 
 const ACTIVITY_EVENTS = ["pointerdown", "pointermove", "keydown", "wheel", "touchstart"] as const;
@@ -33,7 +34,11 @@ export default function LocalWalletBridge() {
       if (document.visibilityState === "visible") lockIfIdle();
     };
     const onStorage = (event: StorageEvent) => {
-      if (event.key === null || event.key === VAULT_STORAGE_KEY) syncFromStorage();
+      if (event.key !== null && event.key !== VAULT_STORAGE_KEY) return;
+      // Another tab removed the wallet (or cleared storage): this tab still
+      // holds its workspace in memory and would write it back on the next change.
+      if (event.key === null || event.newValue === null) forgetOrgWorkspace();
+      syncFromStorage();
     };
 
     for (const name of ACTIVITY_EVENTS) {

@@ -29,8 +29,9 @@
 
 ## Li.Fi fee
 
-`NEXT_PUBLIC_LIFI_FEE` is Li.Fi’s integrator fee as a **fraction of 1**.  
-Hosted production pins **`0.25` (25%)** in the deploy workflow. Set your own share when self-hosting. See `.env.example` and [deploy.md](deploy.md).
+Hosted production takes **no integrator fee**: the deploy workflow sets neither `NEXT_PUBLIC_LIFI_INTEGRATOR` nor `NEXT_PUBLIC_LIFI_FEE`, so a swap or bridge costs only what Li.Fi and the route charge.
+
+Self-hosters can set both to take a fee. `NEXT_PUBLIC_LIFI_FEE` is a **fraction of the amount swapped, taken from the user**: `0.0025` is 0.25%, `0.25` is 25%. See `.env.example` and [deploy.md](deploy.md).
 
 ## Feature → dependency map
 

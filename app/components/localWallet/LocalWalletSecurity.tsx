@@ -11,7 +11,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { DashboardPage, PageHeader } from "@/components/dashboard/PageShell";
 import type { WalletSecret } from "@/lib/localWallet/keys";
-import { AUTO_LOCK_MS, removeVault, revealSecret } from "@/lib/localWallet/store";
+import { removeWalletFromBrowser } from "@/lib/localWallet/removeWallet";
+import { AUTO_LOCK_MS, revealSecret } from "@/lib/localWallet/store";
 import { useLocalWallet } from "@/lib/signer/local";
 import {
   CopyButton,
@@ -163,7 +164,7 @@ function RemoveWalletCard() {
     setBusy(true);
     try {
       await revealSecret(password); // proves the password before anything is deleted
-      removeVault(); // locks; the app returns to the start screen
+      removeWalletFromBrowser(); // locks; the app returns to the start screen
     } catch (e) {
       setError(errorText(e));
       setBusy(false);

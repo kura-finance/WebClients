@@ -21,7 +21,8 @@ import {
   secretFromPrivateKey,
   type WalletSecret,
 } from "@/lib/localWallet/keys";
-import { createVault, removeVault, unlock } from "@/lib/localWallet/store";
+import { removeWalletFromBrowser } from "@/lib/localWallet/removeWallet";
+import { createVault, unlock } from "@/lib/localWallet/store";
 import { useLocalWallet } from "@/lib/signer/local";
 import {
   FieldLabel,
@@ -363,7 +364,7 @@ function UnlockForm({ address }: { address: string | null }) {
             variant="destructive"
             size="sm"
             disabled={!removeConfirmed}
-            onClick={() => removeVault()}
+            onClick={() => removeWalletFromBrowser()}
           >
             Remove wallet from this browser
           </Button>
